@@ -9,9 +9,17 @@ Hexman is an API testing tool designed for testers, built using Electron. It sim
 
 ## Installation
 1. Clone the repository:
-2. 
+   ```
+   git clone https://github.com/dawidpolakowski/Hexman.git
+   ```
+
+Further setup instructions will be added once the initial Electron app scaffolding lands.
+
 ## Contributing
-We welcome contributions! Please read our [Contributing Guidelines](CONTRIBUTING.md).
+We welcome contributions! Please read our [Contributing Guidelines](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Security
+To report a security vulnerability, please see [SECURITY.md](SECURITY.md) rather than opening a public issue.
 
 ## License
 This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
