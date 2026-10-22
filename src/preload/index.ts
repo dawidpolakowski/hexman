@@ -1,8 +1,12 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
+import type { HttpRequestInput, HttpResult } from '../shared/http'
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
-const api = {}
+const api = {
+  sendRequest: (input: HttpRequestInput): Promise<HttpResult> =>
+    ipcRenderer.invoke('http:send', input)
+}
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
