@@ -1,6 +1,6 @@
 {
   "name": "hexman",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "An API testing tool for testers, built with Electron. Supports REST and GraphQL with detailed test reporting.",
   "main": "./out/main/index.js",
   "author": "dawidpolakowski",
