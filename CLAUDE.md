@@ -23,13 +23,14 @@ Hexman is deliberately **not** a Postman/Bruno clone. The owner uses Bruno at wo
 
 ## Architecture
 
-- `src/main/` — Electron main process. `http.ts` sends requests with Node `fetch` (http/https only, 30 s timeout) behind the `http:send` IPC handler.
+- `src/main/` — Electron main process. `http.ts` sends requests with Node `fetch` (http/https only, 30 s timeout) behind the `http:send` IPC handler. `files.ts` handles the `file:save`/`file:open` dialogs (50 MB cap).
 - `src/preload/` — exposes `window.api.sendRequest` via `contextBridge`.
 - `src/shared/http.ts` — request/response types shared by main and renderer (included in both tsconfigs).
 - `src/renderer/src/`:
   - `model.ts` — requests, folders, environments (`{{var}}` substitution), header helpers, `localStorage` persistence.
   - `formats.ts` — cURL and JSON serialize/parse (the `FORMATS` registry used by the editor views).
   - `suite.ts` — suite model, runner, assertions and report. `useSuiteRuns.ts` runs suites in the background.
+  - `workspace.ts` — stored-data schema version (`SCHEMA_VERSION`, `MIGRATIONS`, backup before migrating; run in `main.tsx` before `App` mounts) and the workspace export/import file format. When stored data changes shape, bump `SCHEMA_VERSION` and add a migration instead of silently reading both shapes.
   - `App.tsx` holds all state. Saved requests only reach disk on Save, via the `snapshots` ref; folders, suites and environments autosave.
 - `electron.vite.config.ts` — build config for all three (electron-vite wraps Vite).
 - `electron-builder.yml` — packaging config for distributable builds.
@@ -48,7 +49,7 @@ npm run build      # typecheck + production build (output in out/)
 npm run build:win  # build + package a Windows installer (electron-builder)
 ```
 
-`scripts/e2e.mjs` launches Electron with `--user-data-dir` set to a temp profile, so it never touches the real `%APPDATA%\hexman` data. When it fails, it prints the path of a failure screenshot. In e2e helpers, never mutate React-owned DOM nodes (e.g. `.remove()`); mark them with attributes instead, or React crashes on the next render.
+`scripts/e2e.mjs` launches Electron with `--user-data-dir` set to a temp profile, so it never touches the real `%APPDATA%\hexman` data. When it fails, it prints the path of a failure screenshot. It also attaches to the main process through `--inspect`, so `stubDialog()` can answer native save/open dialogs with a file path. In e2e helpers, never mutate React-owned DOM nodes (e.g. `.remove()`); mark them with attributes instead, or React crashes on the next render.
 
 ## Gotchas
 

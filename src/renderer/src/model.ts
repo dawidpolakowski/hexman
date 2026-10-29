@@ -274,17 +274,20 @@ export function readJson(key: string, storage: StorageLike = localStorage): unkn
   }
 }
 
-/** Stored records that at least carry a string id and name. */
-export function readRecords(
-  key: string,
-  storage: StorageLike = localStorage
-): Record<string, unknown>[] {
-  const value = readJson(key, storage)
+/** Records that at least carry a string id and name; anything else is dropped. */
+export function asRecords(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) return []
   return value.filter(
     (r): r is Record<string, unknown> =>
       isRecord(r) && typeof r.id === 'string' && typeof r.name === 'string'
   )
+}
+
+export function readRecords(
+  key: string,
+  storage: StorageLike = localStorage
+): Record<string, unknown>[] {
+  return asRecords(readJson(key, storage))
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -298,8 +301,9 @@ export function persist(requests: ApiRequest[], storage: StorageLike = localStor
   writeJson(KEYS.requests, requests.filter((r) => r.saved).map(toSaved), storage)
 }
 
-export function restore(storage: StorageLike = localStorage): ApiRequest[] {
-  return readRecords(KEYS.requests, storage).map((r) => ({
+/** A stored or imported request record, repaired into a clean saved request. */
+export function normalizeRequest(r: Record<string, unknown>): ApiRequest {
+  return {
     id: r.id as string,
     name: r.name as string,
     kind: r.kind === 'graphql' ? 'graphql' : 'rest',
@@ -311,23 +315,31 @@ export function restore(storage: StorageLike = localStorage): ApiRequest[] {
     folderId: typeof r.folderId === 'string' ? r.folderId : null,
     saved: true,
     dirty: false
-  }))
+  }
+}
+
+export const normalizeFolder = (f: Record<string, unknown>): Folder => ({
+  id: f.id as string,
+  name: f.name as string,
+  collapsed: f.collapsed === true
+})
+
+export const normalizeEnvironment = (e: Record<string, unknown>): Environment => ({
+  id: e.id as string,
+  name: e.name as string,
+  vars: str(e.vars)
+})
+
+export function restore(storage: StorageLike = localStorage): ApiRequest[] {
+  return readRecords(KEYS.requests, storage).map(normalizeRequest)
 }
 
 export function restoreFolders(storage: StorageLike = localStorage): Folder[] {
-  return readRecords(KEYS.folders, storage).map((f) => ({
-    id: f.id as string,
-    name: f.name as string,
-    collapsed: f.collapsed === true
-  }))
+  return readRecords(KEYS.folders, storage).map(normalizeFolder)
 }
 
 export function restoreEnvironments(storage: StorageLike = localStorage): Environment[] {
-  return readRecords(KEYS.environments, storage).map((e) => ({
-    id: e.id as string,
-    name: e.name as string,
-    vars: str(e.vars)
-  }))
+  return readRecords(KEYS.environments, storage).map(normalizeEnvironment)
 }
 
 export function restoreActiveEnv(storage: StorageLike = localStorage): string | null {

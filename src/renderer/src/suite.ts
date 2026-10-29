@@ -208,10 +208,11 @@ export function persistSuites(suites: Suite[], storage?: StorageLike): void {
   writeJson(KEYS.suites, suites, storage)
 }
 
-export function restoreSuites(storage?: StorageLike): Suite[] {
+/** A stored or imported suite record, repaired: bad steps are dropped, missing fields defaulted. */
+export function normalizeSuite(s: Record<string, unknown>): Suite {
   const num = (v: unknown, fallback: number): number => (typeof v === 'number' ? v : fallback)
   const text = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback)
-  return readRecords(KEYS.suites, storage).map((s) => ({
+  return {
     id: s.id as string,
     name: s.name as string,
     threads: num(s.threads, 1),
@@ -228,5 +229,9 @@ export function restoreSuites(storage?: StorageLike): Suite[] {
         maxMs: text(st.maxMs),
         contains: text(st.contains)
       }))
-  }))
+  }
+}
+
+export function restoreSuites(storage?: StorageLike): Suite[] {
+  return readRecords(KEYS.suites, storage).map(normalizeSuite)
 }

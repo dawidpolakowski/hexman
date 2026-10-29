@@ -31,6 +31,8 @@ interface Props {
   onNewEnv: () => void
   onDeleteEnv: (id: string) => void
   onActivateEnv: (id: string | null) => void
+  onImport: () => void
+  onExport: () => void
 }
 
 const DRAG_TYPE = 'application/x-hexman-request'
@@ -296,6 +298,19 @@ function Sidebar(p: Props): React.JSX.Element {
           )}
         </div>
       </div>
+
+      <footer className="sidebar-foot">
+        <button className="mini-btn" onClick={p.onImport} title="Import a workspace file">
+          Import
+        </button>
+        <button
+          className="mini-btn"
+          onClick={p.onExport}
+          title="Export saved requests, folders, suites and environments to a file"
+        >
+          Export
+        </button>
+      </footer>
     </aside>
   )
 }

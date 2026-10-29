@@ -64,6 +64,14 @@ Suites run against the active environment. A request that is missing or can't be
 
 Saved requests, folders, suites and environments are stored locally in the app's user-data folder, unencrypted. Unsaved drafts live only in memory.
 
+The stored data carries a schema version. When an update changes its shape, Hexman first keeps a copy of the old data, then upgrades it, and offers to save that copy as a file. If the data was written by a newer Hexman, the app refuses to open it instead of overwriting it, and lets you save a copy.
+
+### Export and import
+
+**Export** (bottom of the sidebar) writes your saved requests, folders, suites and environments to one JSON file. Use it as a backup, to move to another machine or to hand a collection to a colleague. Unsaved drafts and unsaved edits are not included. Environments are exported as they are, so remove secrets before you share a file.
+
+**Import** reads such a file (or a backup copy saved by Hexman) and shows what it will add before anything changes. Items that already exist, matched by id, are replaced by the imported version; everything else is added.
+
 ## Development
 
 | Command                              | What it does                                                                                                     |

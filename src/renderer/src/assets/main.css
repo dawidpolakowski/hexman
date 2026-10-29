@@ -618,6 +618,13 @@ textarea::placeholder,
   background: var(--accent-soft);
 }
 
+.sidebar-foot {
+  display: flex;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #21262d;
+}
+
 /* ---------- folders ---------- */
 
 .folder,
@@ -1272,4 +1279,94 @@ textarea::placeholder,
 .failure-why {
   font-family: var(--font-mono);
   color: var(--danger);
+}
+
+/* ---------- dialogs and notices ---------- */
+
+.modal-backdrop,
+.blocked {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(1, 4, 9, 0.7);
+}
+
+.modal {
+  width: min(440px, calc(100vw - 48px));
+  padding: 20px 22px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 12px;
+}
+
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.modal-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--primary);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.import-summary {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.import-summary th {
+  padding: 3px 0;
+  text-align: left;
+  color: var(--text-muted);
+}
+.import-summary td {
+  padding: 3px 0 3px 16px;
+  font-family: var(--font-mono);
+}
+.import-replacing {
+  color: var(--warn);
+}
+
+.notice {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 40px));
+  padding: 10px 10px 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-card);
+  font-size: 13px;
+}
+.notice-ok {
+  border-left: 3px solid var(--success);
+}
+.notice-error {
+  border-left: 3px solid var(--danger);
+}
+.notice-text {
+  overflow-wrap: anywhere;
+}
+.notice .tile-close {
+  display: block;
+  flex: none;
 }

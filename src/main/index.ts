@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { openFileDialog, saveFileDialog } from './files'
 import { sendRequest } from './http'
 
 function createWindow(): void {
@@ -54,6 +55,8 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('http:send', (_event, input) => sendRequest(input))
+  ipcMain.handle('file:save', saveFileDialog)
+  ipcMain.handle('file:open', openFileDialog)
 
   createWindow()
 
