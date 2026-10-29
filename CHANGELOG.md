@@ -6,6 +6,7 @@ All notable changes to Hexman. Versions follow [semantic versioning](https://sem
 
 ### Added
 
+- **Collections folder**: connect a folder in Settings and Hexman keeps saved requests, suites and environments there as plain JSON files, one directory per collection. Share a collection by copying its directory (or use git); outside changes show up when the window regains focus. Writes are atomic, and Hexman never deletes files it didn't create or read.
 - **Extractors** in suites: save a value from a step's response (JSON path, header or regex) as `{{variable}}` for the following steps. Variables are per thread; the report shows the latest extracted values.
 
 ### Changed

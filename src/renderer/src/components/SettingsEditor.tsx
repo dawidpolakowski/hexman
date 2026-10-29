@@ -5,15 +5,52 @@ import NumberField from './NumberField'
 
 interface Props {
   network: NetworkSettings
+  collectionsRoot: string | null
   onChange: (patch: Partial<NetworkSettings>) => void
+  onChooseFolder: () => void
+  onReloadFolder: () => void
+  onDisconnectFolder: () => void
 }
 
-function SettingsEditor({ network, onChange }: Props): React.JSX.Element {
+function SettingsEditor(p: Props): React.JSX.Element {
+  const { network, onChange } = p
   return (
     <section className="editor settings-editor">
       <div className="title-row">
         <span className="method method-env">SET</span>
         <h1 className="settings-title">Settings</h1>
+      </div>
+
+      <div className="field">
+        <span className="field-label">Collections folder</span>
+        <div className="folder-row">
+          <span
+            className={`folder-path${p.collectionsRoot ? '' : ' none'}`}
+            title={p.collectionsRoot ?? undefined}
+          >
+            {p.collectionsRoot ?? 'Not connected: everything is kept inside Hexman'}
+          </span>
+          <button className="btn" onClick={p.onChooseFolder}>
+            {p.collectionsRoot ? 'Change…' : 'Choose folder…'}
+          </button>
+          {p.collectionsRoot && (
+            <>
+              <button className="btn" onClick={p.onReloadFolder}>
+                Reload
+              </button>
+              <button className="btn" onClick={p.onDisconnectFolder}>
+                Disconnect
+              </button>
+            </>
+          )}
+        </div>
+        <p className="hint">
+          Hexman keeps saved requests, suites and environments in this folder as plain JSON files:
+          one directory per sidebar folder (collection), one <code>.request.json</code> file per
+          request, plus <code>_suites</code> and <code>_environments</code>. To share a collection,
+          copy its directory into someone else&apos;s folder, or keep the whole folder in git.
+          Changes made outside Hexman show up when you come back to the window.
+        </p>
       </div>
 
       <div className="field">

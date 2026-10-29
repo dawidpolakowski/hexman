@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // The stored data schema (versioned, migrated with a backup) and the workspace export/import file.
+import type { DiskWorkspace } from '../../shared/collections'
 import type { Environment, Folder, SavedRequest, StorageLike } from './model'
 import {
   KEYS,
@@ -170,13 +171,34 @@ export function parseWorkspace(text: string): Workspace {
   }
 }
 
-/** Items with a known id replace the existing one in place; new items are appended. */
-export function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
+/**
+ * Items with a known id replace the existing one in place and new items are appended; items
+ * missing from `incoming` stay only when keepMissing is set.
+ */
+export function syncById<T extends { id: string }>(
+  current: T[],
+  incoming: T[],
+  keepMissing: boolean
+): T[] {
   const byId = new Map(incoming.map((item) => [item.id, item]))
-  const merged = current.map((item) => byId.get(item.id) ?? item)
+  const kept = current.flatMap((item) => {
+    const next = byId.get(item.id)
+    return next ? [next] : keepMissing ? [item] : []
+  })
   const known = new Set(current.map((item) => item.id))
-  return [...merged, ...incoming.filter((item) => !known.has(item.id))]
+  return [...kept, ...incoming.filter((item) => !known.has(item.id))]
 }
+
+export const mergeById = <T extends { id: string }>(current: T[], incoming: T[]): T[] =>
+  syncById(current, incoming, true)
+
+/** Records read from the collections folder, repaired like an import. */
+export const workspaceFromDisk = (disk: DiskWorkspace): Workspace => ({
+  requests: asRecords(disk.requests).map(normalizeRequest).map(toSaved),
+  folders: asRecords(disk.folders).map(normalizeFolder),
+  suites: asRecords(disk.suites).map(normalizeSuite),
+  environments: asRecords(disk.environments).map(normalizeEnvironment)
+})
 
 export interface ImportLine {
   label: string

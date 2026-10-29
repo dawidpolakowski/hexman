@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useRef, useState } from 'react'
 import type { HttpRequestInput, HttpResult, NetworkSettings } from '../../shared/http'
+import ConfirmDialog from './components/ConfirmDialog'
 import EnvEditor from './components/EnvEditor'
 import ImportDialog from './components/ImportDialog'
 import RequestEditor from './components/RequestEditor'
@@ -32,6 +33,8 @@ import {
 } from './model'
 import type { Suite } from './suite'
 import { createSuite, persistSuites, restoreSuites } from './suite'
+import type { LoadMode } from './useCollections'
+import { useCollections } from './useCollections'
 import { useSuiteRuns } from './useSuiteRuns'
 import type { ImportLine, MigrationResult, Workspace } from './workspace'
 import {
@@ -40,7 +43,8 @@ import {
   isEmptyWorkspace,
   mergeById,
   parseWorkspace,
-  serializeWorkspace
+  serializeWorkspace,
+  syncById
 } from './workspace'
 
 interface Notice {
@@ -76,6 +80,9 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
   const [results, setResults] = useState<Record<string, HttpResult>>({})
   const [sending, setSending] = useState<Set<string>>(new Set())
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null)
+  const [pendingFolder, setPendingFolder] = useState<string | null>(null)
+  // Bumped whenever saved requests reach storage, so the collections folder follows.
+  const [savedVersion, setSavedVersion] = useState(0)
   const [notice, setNotice] = useState<Notice | null>(() =>
     migration.status === 'migrated'
       ? {
@@ -133,7 +140,10 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
       .filter((r) => snapshots.current.has(r.id))
       .map((r) => ({ ...r, ...snapshots.current.get(r.id)!, folderId: r.folderId }))
 
-  const persistSaved = (list: ApiRequest[]): void => persist(onDisk(list))
+  const persistSaved = (list: ApiRequest[]): void => {
+    persist(onDisk(list))
+    setSavedVersion((v) => v + 1)
+  }
 
   const updateRequest = (id: string, patch: Partial<ApiRequest>): void => {
     setRequests((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch, dirty: r.saved } : r)))
@@ -312,6 +322,78 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
     setNotice({ kind: 'ok', text: `Imported ${fileName(path)}` })
   }
 
+  /* ---- collections folder ---- */
+
+  const loadFromFolder = (disk: Workspace, mode: LoadMode, root: string): void => {
+    const keep = mode === 'connect' // connecting adds the folder to what's here; later loads mirror it
+    const fromDisk = disk.requests.map((r) => ({ ...r, saved: true, dirty: false }))
+    const diskIds = new Set(fromDisk.map((r) => r.id))
+    // Unsaved edits win over the file; a request edited here but gone from the folder stays.
+    const edited = new Map(requests.filter((r) => r.dirty).map((r) => [r.id, r]))
+    const saved = syncById(
+      requests.filter((r) => r.saved),
+      fromDisk,
+      keep
+    ).map((r) => edited.get(r.id) ?? r)
+    const orphans = [...edited.values()].filter((r) => !saved.some((s) => s.id === r.id))
+    const next = [...saved, ...orphans, ...requests.filter((r) => !r.saved)]
+
+    for (const r of disk.requests) snapshots.current.set(r.id, r)
+    if (!keep) {
+      for (const id of [...snapshots.current.keys()]) {
+        if (!diskIds.has(id) && !edited.has(id)) snapshots.current.delete(id)
+      }
+    }
+    setRequests(next.length ? next : [createRequest([])])
+    persistSaved(next)
+
+    const collapsed = new Map(folders.map((f) => [f.id, f.collapsed]))
+    setFolders(
+      syncById(
+        folders,
+        disk.folders.map((f) => ({ ...f, collapsed: collapsed.get(f.id) ?? false })),
+        keep
+      )
+    )
+    setSuites(syncById(suites, disk.suites, keep))
+    setEnvironments(syncById(environments, disk.environments, keep))
+    if (mode === 'connect') {
+      const count = disk.requests.length + disk.suites.length + disk.environments.length
+      const loaded = count
+        ? `Loaded ${count} item(s) from it.`
+        : 'Your saved items are now kept there as files.'
+      setNotice({ kind: 'ok', text: `Connected to ${root}. ${loaded}` })
+    }
+  }
+
+  const collections = useCollections(
+    () => ({ requests: onDisk(requests).map(toSaved), folders, suites, environments }),
+    JSON.stringify([savedVersion, folders.map((f) => [f.id, f.name]), suites, environments]),
+    loadFromFolder,
+    (text) => setNotice({ kind: 'error', text })
+  )
+
+  const chooseFolder = async (): Promise<void> => {
+    const choice = await window.api.chooseCollectionsFolder()
+    if (choice.status === 'error') setNotice({ kind: 'error', text: choice.error })
+    if (choice.status !== 'chosen') return
+    if (choice.isCollections || choice.empty) await connectFolder()
+    else setPendingFolder(choice.path)
+  }
+
+  const connectFolder = async (): Promise<void> => {
+    setPendingFolder(null)
+    if (await window.api.connectCollections()) await collections.load('connect')
+  }
+
+  const disconnectFolder = async (): Promise<void> => {
+    await collections.disconnect()
+    setNotice({
+      kind: 'ok',
+      text: 'Disconnected. Your items stay in Hexman; the files stay in the folder.'
+    })
+  }
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && shownRequest) {
@@ -395,7 +477,11 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
         {settingsShown && (
           <SettingsEditor
             network={network}
+            collectionsRoot={collections.root}
             onChange={(patch) => setNetwork((n) => ({ ...n, ...patch }))}
+            onChooseFolder={chooseFolder}
+            onReloadFolder={() => collections.load('rescan')}
+            onDisconnectFolder={disconnectFolder}
           />
         )}
         {env && (
@@ -415,6 +501,23 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
           onConfirm={() => applyImport(pendingImport)}
           onCancel={() => setPendingImport(null)}
         />
+      )}
+      {pendingFolder && (
+        <ConfirmDialog
+          title="Use this folder for collections?"
+          confirmLabel="Use this folder"
+          onConfirm={connectFolder}
+          onCancel={() => setPendingFolder(null)}
+        >
+          <p className="modal-file" title={pendingFolder}>
+            {pendingFolder}
+          </p>
+          <p className="hint">
+            It already has files and isn&apos;t a Hexman collections folder yet. Hexman adds its own
+            files next to them and never deletes files it didn&apos;t create. An empty folder is
+            usually the better choice.
+          </p>
+        </ConfirmDialog>
       )}
       {notice && (
         <div className={`notice notice-${notice.kind}`} role="status">

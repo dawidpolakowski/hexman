@@ -5,6 +5,15 @@ import icon from '../../resources/icon.png?asset'
 import type { SendOptions } from '../shared/http'
 import { openFileDialog, saveFileDialog } from './files'
 import { cancelRequest, sendRequest } from './http'
+import {
+  chooseCollectionsFolder,
+  collectionsIdle,
+  connectCollections,
+  disconnectCollections,
+  getCollectionsRoot,
+  readConnected,
+  writeConnected
+} from './collectionsService'
 import { denyPermissions, fromApp, hardenWindow, isHttpRequestInput } from './security'
 
 const devUrl = is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined
@@ -80,6 +89,12 @@ app.whenReady().then(() => {
   handle('http:cancel', (_event, id) => typeof id === 'string' && cancelRequest(id))
   handle('file:save', saveFileDialog)
   handle('file:open', (event) => openFileDialog(event))
+  handle('collections:get', () => getCollectionsRoot())
+  handle('collections:choose', (event) => chooseCollectionsFolder(event))
+  handle('collections:connect', () => connectCollections())
+  handle('collections:disconnect', () => disconnectCollections())
+  handle('collections:read', () => readConnected())
+  handle('collections:write', (_event, ws) => writeConnected(ws))
 
   createWindow()
 
@@ -93,6 +108,15 @@ app.whenReady().then(() => {
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
+// Let a last write to the collections folder finish before quitting.
+let quitting = false
+app.on('will-quit', (event) => {
+  if (quitting) return
+  quitting = true
+  event.preventDefault()
+  void collectionsIdle().finally(() => app.quit())
+})
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()

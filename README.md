@@ -14,6 +14,7 @@
 - **Environments.** Use `{{baseUrl}}`, `{{token}}` and other variables per environment, switched from the sidebar. Built-in dynamic values: `{{$uuid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}`. The URL field shows a preview of the resolved address.
 - **Header suggestions.** The **+** next to Headers lists the headers your saved requests already use (most used first), then common ones. You can filter the list, or type `Name: value` and press Enter.
 - **Folders.** Group saved requests into folders. Drag tiles between folders or pick a folder in the editor.
+- **Collections as files.** Connect a collections folder and every saved request becomes a plain JSON file, one directory per folder. Share a collection by copying its directory, or keep the whole folder in git.
 
 | cURL view                                                            | Suite report                                                      |
 | -------------------------------------------------------------------- | ----------------------------------------------------------------- |
@@ -87,6 +88,28 @@ If an extractor finds nothing, the sample fails with the reason (`Extract token:
 Saved requests, folders, suites and environments are stored locally in the app's user-data folder, unencrypted. Unsaved drafts live only in memory.
 
 The stored data carries a schema version. When an update changes its shape, Hexman first keeps a copy of the old data, then upgrades it, and offers to save that copy as a file. If the data was written by a newer Hexman, the app refuses to open it instead of overwriting it, and lets you save a copy.
+
+### Collections folder
+
+In **Settings → Collections folder**, pick a folder (an empty one is best). From then on, Hexman keeps your saved work there as plain JSON files:
+
+```
+collections/
+  hexman-collections.json        marks the folder
+  Users/                         one directory per sidebar folder ("collection")
+    collection.json
+    Get user.request.json        one file per saved request
+    Create user.request.json
+  Viewer.request.json            requests outside any folder
+  _suites/Smoke.suite.json
+  _environments/Local.env.json
+```
+
+- **Share a collection** by copying its directory into a colleague's collections folder, or keep the whole folder in git. A copied collection gets its own ids, so copying the same one twice gives two independent collections.
+- **Changes made outside Hexman** (a copied directory, a `git pull`, a hand-written `.request.json`) show up when you come back to the Hexman window, or when you press **Reload**. Renaming a file or directory renames the item.
+- Hexman writes a file when you save a request (suites and environments as you edit them). It only deletes files it created or read itself, so unrelated files and files it can't parse are left alone. Files it skips are listed in a notice.
+- Unsaved drafts and folder expand/collapse state stay inside Hexman. **Disconnect** stops syncing and keeps both your items and the files.
+- Environments are files too: keep secrets out of a folder you share.
 
 ### Export and import
 

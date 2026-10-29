@@ -14,7 +14,8 @@ import {
   migrateStorage,
   parseWorkspace,
   rawSnapshot,
-  serializeWorkspace
+  serializeWorkspace,
+  syncById
 } from './workspace'
 
 function memoryStorage(initial: Record<string, string> = {}): StorageLike & {
@@ -175,6 +176,24 @@ describe('workspace export / import', () => {
         ]
       )
     ).toEqual([{ id: 'a', name: 'A2' }, b, { id: 'c', name: 'C' }])
+  })
+
+  it('mirrors a list without keeping missing items, preserving the current order', () => {
+    const current = [
+      { id: 'a', v: 1 },
+      { id: 'b', v: 1 },
+      { id: 'c', v: 1 }
+    ]
+    const incoming = [
+      { id: 'd', v: 2 },
+      { id: 'c', v: 2 },
+      { id: 'a', v: 2 }
+    ]
+    expect(syncById(current, incoming, false)).toEqual([
+      { id: 'a', v: 2 },
+      { id: 'c', v: 2 },
+      { id: 'd', v: 2 }
+    ])
   })
 
   it('summarizes how many items an import adds and replaces', () => {

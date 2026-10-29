@@ -1493,3 +1493,26 @@ textarea::placeholder,
   font-size: 12.5px;
   color: var(--warn);
 }
+
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.folder-path {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 6px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--primary);
+}
+.folder-path.none {
+  color: var(--text-muted);
+}

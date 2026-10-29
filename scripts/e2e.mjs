@@ -4,7 +4,15 @@
 // Chrome DevTools Protocol, checks the core flows and writes docs/screenshot*.png.
 // Run with `npm run test:e2e` (builds first).
 import { spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -303,7 +311,8 @@ try {
   assert(
     (await evaluate(
       `typeof require === 'undefined' && typeof process === 'undefined' && !('electron' in window) && Object.keys(window.api).sort().join()`
-    )) === 'cancelRequest,openFile,saveFile,sendRequest',
+    )) ===
+      'cancelRequest,chooseCollectionsFolder,connectCollections,disconnectCollections,getCollectionsRoot,openFile,readCollections,saveFile,sendRequest,writeCollections',
     'the renderer is sandboxed and sees only the narrow window.api'
   )
 
@@ -722,6 +731,69 @@ try {
     onDiskNow.some((r) => r.name === 'Ping') && onDiskNow.some((r) => r.name === 'Health (shared)'),
     'imported requests are saved to disk right away'
   )
+
+  /* --- collections folder --- */
+  const folder = join(profile, 'collections')
+  mkdirSync(folder)
+  const waitForFile = async (rel, present = true) => {
+    for (const end = Date.now() + 10_000; Date.now() < end;) {
+      if (existsSync(join(folder, rel)) === present) return
+      await sleep(100)
+    }
+    throw new Error(`Timed out waiting for ${rel} to be ${present ? 'written' : 'removed'}`)
+  }
+  await stubDialog('open', folder)
+  await click(byText('.sidebar-foot .mini-btn', 'Settings'))
+  await waitFor(q('.settings-editor'), 'settings view')
+  await click(byText('.folder-row .btn', 'Choose folder…'))
+  await waitFor(`${q('.notice-ok')}?.textContent.includes('Connected to')`, 'connect notice')
+  await waitFor(`${q('.folder-path')}?.textContent.endsWith('collections')`, 'connected path')
+  await waitForFile('Users/Get user.request.json')
+  await waitForFile('_environments/Local.env.json')
+  const missing = [
+    'hexman-collections.json',
+    'Users/collection.json',
+    'Shared/Ping.request.json',
+    'Monitoring/Health (shared).request.json',
+    'Viewer.request.json',
+    '_suites/Smoke_ users API.suite.json',
+    '_environments/Local.env.json'
+  ].filter((rel) => !existsSync(join(folder, rel)))
+  assert(
+    missing.length === 0,
+    `connecting a folder writes one directory per collection and one file per item${missing.length ? ` (missing: ${missing.join(', ')})` : ''}`
+  )
+
+  cpSync(join(folder, 'Users'), join(folder, 'Users (team copy)'), { recursive: true })
+  writeFileSync(
+    join(folder, 'Auth', 'Refresh token.request.json'),
+    JSON.stringify({ method: 'POST', url: '{{baseUrl}}/api/refresh' })
+  )
+  await evaluate(`window.dispatchEvent(new Event('focus'))`)
+  await waitFor(`${tile('Refresh token')}`, 'hand-made request to appear')
+  tiles = await requestTiles()
+  assert(
+    tiles.filter((t) => t.folder === 'Users (team copy)').length === 3 &&
+      tiles.filter((t) => t.folder === 'Users').length === 3 &&
+      tiles.find((t) => t.name === 'Refresh token').folder === 'Auth',
+    'a collection copied into the folder, and a hand-made file, show up when the window regains focus'
+  )
+  const copyId = () =>
+    JSON.parse(readFileSync(join(folder, 'Users (team copy)', 'Get user.request.json'), 'utf8')).id
+  for (const end = Date.now() + 5000; copyId() === 'seed-0' && Date.now() < end;) await sleep(100)
+  assert(copyId().startsWith('seed-0~'), 'the copy gets its own ids, written back to its files')
+
+  await click(tile('Ping'))
+  await typeInto(q('.name-input'), 'Ping v2', { replace: true })
+  await click(q('.btn-save'))
+  await waitForFile('Shared/Ping v2.request.json')
+  await waitForFile('Shared/Ping.request.json', false)
+  assert(true, 'renaming and saving a request renames its file')
+
+  rmSync(join(folder, 'Auth', 'Refresh token.request.json'))
+  await evaluate(`window.dispatchEvent(new Event('focus'))`)
+  await waitFor(`!${tile('Refresh token')}`, 'deleted file to disappear')
+  assert(true, 'a file deleted outside Hexman disappears from the sidebar')
 
   console.log(`\n${passed} checks passed`)
 } catch (err) {
