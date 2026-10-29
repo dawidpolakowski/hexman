@@ -3,7 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { openFileDialog, saveFileDialog } from './files'
-import { sendRequest } from './http'
+import { cancelRequest, sendRequest } from './http'
 
 function createWindow(): void {
   // Create the browser window.
@@ -54,7 +54,8 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  ipcMain.handle('http:send', (_event, input) => sendRequest(input))
+  ipcMain.handle('http:send', (_event, input, options) => sendRequest(input, options))
+  ipcMain.handle('http:cancel', (_event, id) => typeof id === 'string' && cancelRequest(id))
   ipcMain.handle('file:save', saveFileDialog)
   ipcMain.handle('file:open', openFileDialog)
 

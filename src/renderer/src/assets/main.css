@@ -377,6 +377,11 @@ textarea:focus {
   padding: 0 14px;
   border-radius: 0;
 }
+.url-row .btn-stop {
+  padding: 0 22px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
 .url-row .btn-send {
   border-radius: 0 var(--radius) var(--radius) 0;
   font-size: 14px;
@@ -612,6 +617,7 @@ textarea::placeholder,
     border-color var(--transition),
     background var(--transition);
 }
+.mini-btn-active,
 .mini-btn:hover {
   color: var(--primary);
   border-color: var(--accent-border);
@@ -620,6 +626,7 @@ textarea::placeholder,
 
 .sidebar-foot {
   display: flex;
+  align-items: center;
   gap: 6px;
   padding-top: 10px;
   border-top: 1px solid #21262d;
@@ -1369,4 +1376,48 @@ textarea::placeholder,
 .notice .tile-close {
   display: block;
   flex: none;
+}
+
+/* ---------- settings ---------- */
+
+.settings-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.settings-row {
+  display: flex;
+  gap: 14px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.check-row input {
+  accent-color: var(--primary);
+}
+
+.text-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-input {
+  max-width: 480px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.settings-warn {
+  font-size: 12.5px;
+  color: var(--warn);
 }

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useRef, useState } from 'react'
-import type { HttpRequestInput, HttpResult } from '../../shared/http'
+import type { HttpRequestInput, HttpResult, NetworkSettings } from '../../shared/http'
 import EnvEditor from './components/EnvEditor'
 import ImportDialog from './components/ImportDialog'
 import RequestEditor from './components/RequestEditor'
+import SettingsEditor from './components/SettingsEditor'
 import ResponseView from './components/ResponseView'
 import type { Selection } from './components/Sidebar'
 import Sidebar from './components/Sidebar'
@@ -24,6 +25,7 @@ import {
   restoreActiveEnv,
   restoreEnvironments,
   restoreFolders,
+  restoreSettings,
   sidebarOrder,
   toSaved,
   writeJson
@@ -68,6 +70,7 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
   const [suites, setSuites] = useState<Suite[]>(restoreSuites)
   const [environments, setEnvironments] = useState<Environment[]>(restoreEnvironments)
   const [activeEnvId, setActiveEnvId] = useState<string | null>(restoreActiveEnv)
+  const [network, setNetwork] = useState<NetworkSettings>(restoreSettings)
   const [selected, setSelected] = useState<Selection>({ type: 'request', id: initial[0].id })
   const [view, setView] = useState<View>('form')
   const [results, setResults] = useState<Record<string, HttpResult>>({})
@@ -92,6 +95,7 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
   useEffect(() => persistSuites(suites), [suites])
   useEffect(() => writeJson(KEYS.environments, environments), [environments])
   useEffect(() => writeJson(KEYS.activeEnv, activeEnvId), [activeEnvId])
+  useEffect(() => writeJson(KEYS.settings, network), [network])
 
   useEffect(() => {
     if (!notice || notice.offerBackup) return
@@ -106,13 +110,14 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
   const { runs, start, stop } = useSuiteRuns((requestId) => {
     const r = requests.find((x) => x.id === requestId)
     return r ? toInput(r) : undefined
-  })
+  }, network)
 
   const request =
     selected.type === 'request' ? requests.find((r) => r.id === selected.id) : undefined
   const suite = selected.type === 'suite' ? suites.find((s) => s.id === selected.id) : undefined
   const env = selected.type === 'env' ? environments.find((e) => e.id === selected.id) : undefined
-  const shownRequest = request ?? (suite || env ? undefined : requests[0])
+  const settingsShown = selected.type === 'settings'
+  const shownRequest = request ?? (suite || env || settingsShown ? undefined : requests[0])
 
   const firstRequest = (list: ApiRequest[] = requests): Selection => ({
     type: 'request',
@@ -183,7 +188,7 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
     setSending((s) => new Set(s).add(r.id))
     let result: HttpResult
     try {
-      result = await window.api.sendRequest(toInput(r))
+      result = await window.api.sendRequest(toInput(r), { id: r.id, network })
     } catch (err) {
       result = { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
@@ -364,6 +369,7 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
               onChange={(patch) => updateRequest(shownRequest.id, patch)}
               onMove={(folderId) => moveRequest(shownRequest.id, folderId)}
               onSend={() => send(shownRequest)}
+              onCancel={() => window.api.cancelRequest(shownRequest.id)}
               onSave={() => saveRequest(shownRequest.id)}
             />
             <ResponseView
@@ -383,6 +389,12 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
             onChange={(patch) => updateSuite(suite.id, patch)}
             onRun={() => start(suite)}
             onStop={() => stop(suite.id)}
+          />
+        )}
+        {settingsShown && (
+          <SettingsEditor
+            network={network}
+            onChange={(patch) => setNetwork((n) => ({ ...n, ...patch }))}
           />
         )}
         {env && (

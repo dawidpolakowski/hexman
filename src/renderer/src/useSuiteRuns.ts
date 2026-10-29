@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useRef, useState } from 'react'
-import type { HttpRequestInput } from '../../shared/http'
+import type { HttpRequestInput, NetworkSettings } from '../../shared/http'
 import type { Sample, Suite } from './suite'
 import { plannedSamples, runSuite } from './suite'
 
@@ -17,7 +17,10 @@ export interface RunState {
 const FLUSH_MS = 200
 
 /** Runs suites in the background; samples are batched into state a few times a second. */
-export function useSuiteRuns(resolve: (requestId: string) => HttpRequestInput | undefined): {
+export function useSuiteRuns(
+  resolve: (requestId: string) => HttpRequestInput | undefined,
+  network: NetworkSettings
+): {
   runs: Record<string, RunState>
   start: (suite: Suite) => void
   stop: (suiteId: string) => void
@@ -25,8 +28,10 @@ export function useSuiteRuns(resolve: (requestId: string) => HttpRequestInput | 
   const [runs, setRuns] = useState<Record<string, RunState>>({})
   const controllers = useRef(new Map<string, AbortController>())
   const resolveRef = useRef(resolve)
+  const networkRef = useRef(network)
   useEffect(() => {
     resolveRef.current = resolve
+    networkRef.current = network
   })
 
   const patch = (id: string, fn: (run: RunState) => Partial<RunState>): void =>
@@ -60,7 +65,7 @@ export function useSuiteRuns(resolve: (requestId: string) => HttpRequestInput | 
     runSuite({
       suite,
       resolve: (id) => resolveRef.current(id),
-      send: (input) => window.api.sendRequest(input),
+      send: (input) => window.api.sendRequest(input, { network: networkRef.current }),
       onSample: (sample) => buffer.push(sample),
       signal: controller.signal
     }).finally(() => {

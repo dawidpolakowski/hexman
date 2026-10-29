@@ -28,7 +28,7 @@ npm install
 npm run dev
 ```
 
-Shortcuts: **Ctrl+S** saves the request, **Ctrl+Enter** (or Enter in the URL field) sends it.
+Shortcuts: **Ctrl+S** saves the request, **Ctrl+Enter** (or Enter in the URL field) sends it. While a request runs, **Send** turns into **Cancel**.
 
 ## Reference
 
@@ -48,7 +48,7 @@ Shortcuts: **Ctrl+S** saves the request, **Ctrl+Enter** (or Enter in the URL fie
 
 ### cURL support
 
-Supported options: `-X`, `-H`, `-d`/`--data`/`--data-raw`/`--data-binary`/`--data-urlencode`, `--json`, `-u`, `-A`, `-e`, `-b`, `-G`, `-I`, and `--url`. Both bash-style copies and Windows `cmd` copies (`^` escapes) work, so Chrome's _Copy as cURL_ output can be pasted directly. Options that don't change the request itself, such as `-s`, `-L`, `-k` and `--compressed`, are ignored. Multipart forms (`-F`), uploads (`-T`) and `@file` bodies are not supported yet.
+Supported options: `-X`, `-H`, `-d`/`--data`/`--data-raw`/`--data-binary`/`--data-urlencode`, `--json`, `-u`, `-A`, `-e`, `-b`, `-G`, `-I`, and `--url`. Both bash-style copies and Windows `cmd` copies (`^` escapes) work, so Chrome's _Copy as cURL_ output can be pasted directly. Options that don't change the request itself, such as `-s`, `-L`, `-k` and `--compressed`, are ignored (TLS verification is a global setting, see below). Multipart forms (`-F`), uploads (`-T`) and `@file` bodies are not supported yet.
 
 ### Suite assertions
 
@@ -59,6 +59,14 @@ Supported options: `-X`, `-H`, `-d`/`--data`/`--data-raw`/`--data-binary`/`--dat
 | Body contains | any text the response body must include          |
 
 Suites run against the active environment. A request that is missing or can't be resolved (for example, an undefined variable) is reported as a failed sample instead of being sent.
+
+### Settings
+
+**Settings** (bottom of the sidebar) apply to every request and suite sample:
+
+- **Timeout**: 1 s to 10 min, 30 s by default.
+- **Verify TLS certificates**: turn it off for test servers with self-signed or expired certificates, like `curl -k`. When a request fails on a certificate, the error says so.
+- **Proxy**: an `http://user:pass@host:port` URL. When it is empty, Hexman uses `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` from the environment if they are set, and connects directly otherwise.
 
 ### Where data lives
 

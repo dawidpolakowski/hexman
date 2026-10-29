@@ -23,7 +23,7 @@ Hexman is deliberately **not** a Postman/Bruno clone. The owner uses Bruno at wo
 
 ## Architecture
 
-- `src/main/` — Electron main process. `http.ts` sends requests with Node `fetch` (http/https only, 30 s timeout) behind the `http:send` IPC handler. `files.ts` handles the `file:save`/`file:open` dialogs (50 MB cap).
+- `src/main/` — Electron main process. `http.ts` sends requests with undici's `fetch` (http/https only) behind `http:send`, using the `NetworkSettings` sent along with each request (timeout, TLS verification, proxy; one dispatcher per TLS/proxy combo). It also handles `http:cancel` by request id. Its tests use a self-signed cert from `src/main/fixtures/`. `files.ts` handles the `file:save`/`file:open` dialogs (50 MB cap).
 - `src/preload/` — exposes `window.api.sendRequest` via `contextBridge`.
 - `src/shared/http.ts` — request/response types shared by main and renderer (included in both tsconfigs).
 - `src/renderer/src/`:

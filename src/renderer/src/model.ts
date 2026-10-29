@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { HttpRequestInput } from '../../shared/http'
+import type { HttpRequestInput, NetworkSettings } from '../../shared/http'
+import { normalizeNetwork } from '../../shared/http'
 
 export const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
 export type Method = (typeof METHODS)[number]
@@ -254,7 +255,8 @@ export const KEYS = {
   folders: 'hexman.folders.v1',
   suites: 'hexman.suites.v1',
   environments: 'hexman.environments.v1',
-  activeEnv: 'hexman.activeEnvironment.v1'
+  activeEnv: 'hexman.activeEnvironment.v1',
+  settings: 'hexman.settings.v1'
 }
 
 export function writeJson(key: string, value: unknown, storage: StorageLike = localStorage): void {
@@ -345,4 +347,8 @@ export function restoreEnvironments(storage: StorageLike = localStorage): Enviro
 export function restoreActiveEnv(storage: StorageLike = localStorage): string | null {
   const id = readJson(KEYS.activeEnv, storage)
   return typeof id === 'string' ? id : null
+}
+
+export function restoreSettings(storage: StorageLike = localStorage): NetworkSettings {
+  return normalizeNetwork(readJson(KEYS.settings, storage))
 }

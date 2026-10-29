@@ -62,6 +62,7 @@ function demoApi(req, res) {
     }
     if (route === 'POST /api/login') return json(200, { token: 'demo-token', expiresIn: 3600 })
     if (route === 'GET /health') return json(200, { status: 'ok' })
+    if (route === 'GET /slow') return setTimeout(() => json(200, { status: 'late' }), 3000)
     if (route === 'POST /graphql') {
       const { query } = JSON.parse(body || '{}')
       if (!query) return json(400, { errors: [{ message: 'Missing query' }] })
@@ -536,6 +537,49 @@ try {
   await click(q('.url-row .btn-send'))
   await waitFor(`${q('.error-text')}?.textContent.includes('Unsupported protocol')`, 'error')
   assert(true, 'non-HTTP URLs are rejected with a readable error')
+
+  /* --- cancel, settings --- */
+  await typeInto(q('.url-input'), '{{baseUrl}}/slow', { replace: true })
+  await click(q('.url-row .btn-send'))
+  await waitFor(q('.url-row .btn-stop'), 'cancel button while sending')
+  await click(q('.url-row .btn-stop'))
+  await waitFor(`${q('.error-text')}?.textContent === 'Canceled'`, 'canceled request')
+  assert(true, 'a running request can be canceled')
+
+  await click(byText('.sidebar-foot .mini-btn', 'Settings'))
+  await waitFor(q('.settings-editor'), 'settings view')
+  await typeInto(
+    `${byText('.num-field span', 'Timeout (seconds)')}.parentElement.querySelector('input')`,
+    '1',
+    {
+      replace: true
+    }
+  )
+  await click(q('.check-row input'))
+  let settings = JSON.parse(await evaluate(`localStorage.getItem('hexman.settings.v1')`))
+  assert(
+    settings.timeoutMs === 1000 &&
+      settings.verifyTls === false &&
+      (await evaluate(`!!${q('.settings-warn')}`)),
+    'settings save the timeout and TLS verification, with a warning when it is off'
+  )
+  await click(tile('Request 2'))
+  await click(q('.url-row .btn-send'))
+  await waitFor(`${q('.error-text')}?.textContent === 'Timed out after 1s'`, 'timeout error')
+  assert(true, 'requests use the timeout from Settings')
+
+  await click(byText('.sidebar-foot .mini-btn', 'Settings'))
+  await waitFor(q('.settings-editor'), 'settings view')
+  await typeInto(
+    `${byText('.num-field span', 'Timeout (seconds)')}.parentElement.querySelector('input')`,
+    '30',
+    {
+      replace: true
+    }
+  )
+  await click(q('.check-row input'))
+  settings = JSON.parse(await evaluate(`localStorage.getItem('hexman.settings.v1')`))
+  assert(settings.timeoutMs === 30000 && settings.verifyTls === true, 'settings can be put back')
 
   await click(tile('Viewer'))
   await sendAndWait(q('.url-row .btn-send'), '200', 'GraphQL response')

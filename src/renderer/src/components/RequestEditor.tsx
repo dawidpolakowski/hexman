@@ -23,6 +23,7 @@ interface Props {
   onChange: (patch: Partial<ApiRequest>) => void
   onMove: (folderId: string | null) => void
   onSend: () => void
+  onCancel: () => void
   onSave: () => void
 }
 
@@ -136,13 +137,15 @@ function RequestEditor(p: Props): React.JSX.Element {
                 }
               }}
             />
-            <button
-              className="btn btn-send"
-              type="submit"
-              disabled={p.sending || !request.url.trim()}
-            >
-              {p.sending ? '…' : 'Send'}
-            </button>
+            {p.sending ? (
+              <button className="btn btn-stop" type="button" onClick={p.onCancel}>
+                Cancel
+              </button>
+            ) : (
+              <button className="btn btn-send" type="submit" disabled={!request.url.trim()}>
+                Send
+              </button>
+            )}
           </form>
           {resolved && (
             <div className={`url-preview${resolved.bad ? ' bad' : ''}`}>
@@ -204,6 +207,7 @@ function RequestEditor(p: Props): React.JSX.Element {
           sending={p.sending}
           onChange={p.onChange}
           onSend={p.onSend}
+          onCancel={p.onCancel}
         />
       )}
     </section>

@@ -1,12 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { OpenFileResult, SaveFileInput, SaveFileResult } from '../shared/files'
-import type { HttpRequestInput, HttpResult } from '../shared/http'
+import type { HttpRequestInput, HttpResult, SendOptions } from '../shared/http'
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
 const api = {
-  sendRequest: (input: HttpRequestInput): Promise<HttpResult> =>
-    ipcRenderer.invoke('http:send', input),
+  sendRequest: (input: HttpRequestInput, options?: SendOptions): Promise<HttpResult> =>
+    ipcRenderer.invoke('http:send', input, options),
+  cancelRequest: (id: string): Promise<boolean> => ipcRenderer.invoke('http:cancel', id),
   saveFile: (input: SaveFileInput): Promise<SaveFileResult> =>
     ipcRenderer.invoke('file:save', input),
   openFile: (): Promise<OpenFileResult> => ipcRenderer.invoke('file:open')

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from 'react'
 import type { ApiRequest, Folder } from '../model'
 import type { Suite, SuiteStep } from '../suite'
 import { LIMITS, createStep, plannedSamples, summarize } from '../suite'
 import type { RunState } from '../useSuiteRuns'
 import MethodBadge from './MethodBadge'
+import NumberField from './NumberField'
 
 interface Props {
   suite: Suite
@@ -15,39 +15,6 @@ interface Props {
   onChange: (patch: Partial<Suite>) => void
   onRun: () => void
   onStop: () => void
-}
-
-function NumberField(p: {
-  label: string
-  value: number
-  min: number
-  max: number
-  onChange: (value: number) => void
-}): React.JSX.Element {
-  const [text, setText] = useState(String(p.value))
-  const [prev, setPrev] = useState(p.value)
-  if (p.value !== prev) {
-    setPrev(p.value)
-    setText(String(p.value))
-  }
-  return (
-    <label className="num-field">
-      <span>{p.label}</span>
-      <input
-        type="number"
-        min={p.min}
-        max={p.max}
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value)
-          const n = Number(e.target.value)
-          if (e.target.value !== '' && Number.isInteger(n) && n >= p.min && n <= p.max)
-            p.onChange(n)
-        }}
-        onBlur={() => setText(String(p.value))}
-      />
-    </label>
-  )
 }
 
 const pct = (part: number, whole: number): string =>
