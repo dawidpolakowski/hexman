@@ -115,6 +115,56 @@ describe('runSuite', () => {
     ])
   })
 
+  it('passes extracted values to later steps, separately per thread', async () => {
+    const login = {
+      ...createStep('login'),
+      extract: [{ id: 'e', variable: 'token', source: 'json' as const, expr: '$.token' }]
+    }
+    const me = createStep('me')
+    const sent: string[] = []
+    const samples: Sample[] = []
+    await runSuite({
+      suite: suiteWith({ threads: 2, loops: 2, steps: [login, me] }),
+      resolve: (id, vars) => {
+        if (id === 'me' && !vars.token) throw new Error('Undefined variable {{token}}')
+        return { method: 'GET', url: `http://x/${id}`, headers: { auth: vars.token ?? '' } }
+      },
+      send: async (input) => {
+        sent.push(`${input.url} ${input.headers.auth}`)
+        return input.url.endsWith('login')
+          ? ok(200, JSON.stringify({ token: `t${sent.length}` }))
+          : ok(200)
+      },
+      onSample: (s) => samples.push(s),
+      signal: new AbortController().signal
+    })
+    expect(samples.every((s) => s.failures.length === 0)).toBe(true)
+    expect(sent.filter((s) => s.startsWith('http://x/me')).every((s) => /me t\d+$/.test(s))).toBe(
+      true
+    )
+    const loginSamples = samples.filter((s) => s.stepId === login.id)
+    expect(loginSamples.every((s) => s.extracted?.[0][0] === 'token')).toBe(true)
+  })
+
+  it('fails the sample when an extractor finds nothing', async () => {
+    const samples: Sample[] = []
+    await runSuite({
+      suite: suiteWith({
+        steps: [
+          {
+            ...createStep('login'),
+            extract: [{ id: 'e', variable: 'token', source: 'json', expr: '$.token' }]
+          }
+        ]
+      }),
+      resolve: () => ({ method: 'GET', url: 'http://x', headers: {} }),
+      send: async () => ok(200, '{"error":"no"}'),
+      onSample: (s) => samples.push(s),
+      signal: new AbortController().signal
+    })
+    expect(samples[0].failures).toEqual(['Extract token: $.token not found'])
+  })
+
   it('ramps threads up and stops when aborted', async () => {
     const controller = new AbortController()
     const waits: number[] = []

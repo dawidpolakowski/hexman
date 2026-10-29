@@ -10,7 +10,7 @@
 
 - **Tiles, not tabs.** Every request is a tile in the sidebar. A new request gets a numbered name (`Request 3`) right away and sits at the bottom while it's unsaved. Once you save it, it gets a frame and moves up into its folder.
 - **One request, three languages.** Edit a request as a **form**, as a **cURL** command or as a **JSON** document. All three stay in sync, and every edit flows back into the request. If you paste a `curl …` command into the URL field, Hexman imports the whole request.
-- **Suites, like JMeter.** A suite has a thread group (threads, ramp-up, loops) that runs a chain of saved requests. Each step can assert on status, response time and body content. The summary report shows avg/min/max/P90 and error % per step, plus the failed samples and why each one failed.
+- **Suites, like JMeter.** A suite has a thread group (threads, ramp-up, loops) that runs a chain of saved requests. Each step can assert on status, response time and body content, and **extract** values (JSON path, header or regex) into variables for the next steps, e.g. the token from Login. The summary report shows avg/min/max/P90 and error % per step, plus the failed samples and why each one failed.
 - **Environments.** Use `{{baseUrl}}`, `{{token}}` and other variables per environment, switched from the sidebar. Built-in dynamic values: `{{$uuid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}`. The URL field shows a preview of the resolved address.
 - **Header suggestions.** The **+** next to Headers lists the headers your saved requests already use (most used first), then common ones. You can filter the list, or type `Name: value` and press Enter.
 - **Folders.** Group saved requests into folders. Drag tiles between folders or pick a folder in the editor.
@@ -61,6 +61,18 @@ Supported options: `-X`, `-H`, `-d`/`--data`/`--data-raw`/`--data-binary`/`--dat
 | Body contains | any text the response body must include          |
 
 Suites run against the active environment. A request that is missing or can't be resolved (for example, an undefined variable) is reported as a failed sample instead of being sent.
+
+### Extractors
+
+**+ Extract variable** under a step saves a value from its response as `{{name}}` for the steps after it. Every thread keeps its own variables across steps and loops, like a JMeter thread, and an extracted variable overrides an environment variable with the same name.
+
+| Source | Expression                                                        | Example                       |
+| ------ | ----------------------------------------------------------------- | ----------------------------- |
+| JSON   | path with `.key`, `[0]`, `[-1]`, `['key with spaces']`, `.length` | `$.data.token`                |
+| Header | header name, any case                                             | `Location`                    |
+| Regex  | first capture group, or the whole match                           | `name="csrf" value="([^"]+)"` |
+
+If an extractor finds nothing, the sample fails with the reason (`Extract token: $.token not found`). The report lists the latest value of every extracted variable.
 
 ### Settings
 

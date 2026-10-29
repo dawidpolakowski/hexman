@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { Extractor } from '../extract'
+import { EXTRACT_SOURCES, VARIABLE_NAME, createExtractor } from '../extract'
 import type { ApiRequest, Folder } from '../model'
 import type { Suite, SuiteStep } from '../suite'
 import { LIMITS, createStep, plannedSamples, summarize } from '../suite'
@@ -39,6 +41,10 @@ function SuiteEditor({
 
   const updateStep = (id: string, patch: Partial<SuiteStep>): void =>
     onChange({ steps: suite.steps.map((s) => (s.id === id ? { ...s, ...patch } : s)) })
+  const updateExtractor = (step: SuiteStep, id: string, patch: Partial<Extractor>): void =>
+    updateStep(step.id, {
+      extract: step.extract.map((ex) => (ex.id === id ? { ...ex, ...patch } : ex))
+    })
   const moveStep = (index: number, delta: number): void => {
     const steps = [...suite.steps]
     const [step] = steps.splice(index, 1)
@@ -55,6 +61,17 @@ function SuiteEditor({
         .slice(-50)
         .reverse()
     : []
+  // Latest extracted value per step and variable, in step order.
+  const latest = new Map<string, [string, string, string]>()
+  for (const sample of run?.samples ?? []) {
+    for (const [name, value] of sample.extracted ?? []) {
+      latest.set(`${sample.stepId} ${name}`, [sample.stepId, name, value])
+    }
+  }
+  const stepOrder = new Map(suite.steps.map((s, i) => [s.id, i]))
+  const extracted = [...latest.values()].sort(
+    (a, b) => (stepOrder.get(a[0]) ?? 0) - (stepOrder.get(b[0]) ?? 0)
+  )
   const stepLabel = (stepId: string): string => {
     const index = suite.steps.findIndex((s) => s.id === stepId)
     const r = byId.get(suite.steps[index]?.requestId ?? '')
@@ -122,7 +139,7 @@ function SuiteEditor({
 
       <section className="editor">
         <div className="field-head">
-          <span className="field-label">Steps · assertions</span>
+          <span className="field-label">Steps · assertions · extractors</span>
         </div>
         <div className="steps">
           {suite.steps.map((step, i) => {
@@ -184,6 +201,73 @@ function SuiteEditor({
                     onClick={() => onChange({ steps: suite.steps.filter((s) => s.id !== step.id) })}
                   >
                     ×
+                  </button>
+                </div>
+                <div className="extractors">
+                  {step.extract.map((ex) => {
+                    const source = EXTRACT_SOURCES.find((s) => s.value === ex.source)
+                    const badName = !!ex.variable.trim() && !VARIABLE_NAME.test(ex.variable.trim())
+                    return (
+                      <div className="extractor" key={ex.id}>
+                        <span className="extract-braces">{'{{'}</span>
+                        <input
+                          className={`extract-var${badName ? ' bad' : ''}`}
+                          value={ex.variable}
+                          placeholder="token"
+                          spellCheck={false}
+                          aria-label="Variable name"
+                          title={badName ? 'Letters, digits, _ . - only' : undefined}
+                          onChange={(e) =>
+                            updateExtractor(step, ex.id, { variable: e.target.value })
+                          }
+                        />
+                        <span className="extract-braces">{'}}'}</span>
+                        <span className="extract-arrow">←</span>
+                        <select
+                          value={ex.source}
+                          aria-label="Extract from"
+                          onChange={(e) =>
+                            updateExtractor(step, ex.id, {
+                              source: e.target.value as Extractor['source']
+                            })
+                          }
+                        >
+                          {EXTRACT_SOURCES.map((s) => (
+                            <option key={s.value} value={s.value}>
+                              {s.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          className="extract-expr"
+                          value={ex.expr}
+                          placeholder={source?.placeholder}
+                          spellCheck={false}
+                          aria-label="Extract expression"
+                          onChange={(e) => updateExtractor(step, ex.id, { expr: e.target.value })}
+                        />
+                        <button
+                          className="tile-edit danger"
+                          aria-label="Remove extractor"
+                          onClick={() =>
+                            updateStep(step.id, {
+                              extract: step.extract.filter((x) => x.id !== ex.id)
+                            })
+                          }
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )
+                  })}
+                  <button
+                    className="mini-btn add-extract"
+                    title="Save a value from this response as a variable for the next steps"
+                    onClick={() =>
+                      updateStep(step.id, { extract: [...step.extract, createExtractor()] })
+                    }
+                  >
+                    + Extract variable
                   </button>
                 </div>
               </div>
@@ -262,6 +346,20 @@ function SuiteEditor({
               </tr>
             </tbody>
           </table>
+          {extracted.length > 0 && (
+            <div className="extracted">
+              <div className="field-label">Extracted variables (latest sample)</div>
+              {extracted.map(([stepId, name, value]) => (
+                <div className="extracted-row" key={`${stepId} ${name}`}>
+                  <span className="failure-step">{stepLabel(stepId)}</span>
+                  <code className="extracted-name">{`{{${name}}}`}</code>
+                  <span className="extracted-value" title={value}>
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           {failures.length > 0 && (
             <div className="failures">
               <div className="field-label">Failed samples (latest {failures.length})</div>

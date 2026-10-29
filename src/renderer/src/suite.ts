@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // JMeter-style suites: a thread group (threads, ramp-up, loops) runs an ordered list of saved
 // requests; every sample is checked against the step's assertions and rolled up into a report.
+// Extractors turn response values into variables for the later steps of the same thread.
 import type { HttpRequestInput, HttpResult } from '../../shared/http'
+import type { Extractor } from './extract'
+import { isExtractSource, runExtractors } from './extract'
 import type { StorageLike } from './model'
 import { KEYS, isRecord, nextName, readRecords, writeJson } from './model'
 
@@ -11,6 +14,7 @@ export interface SuiteStep {
   status: string // expected status: "2xx", "200", "200,201", "200-299"; empty = any
   maxMs: string // response-time limit in ms; empty = none
   contains: string // text the body must contain; empty = none
+  extract: Extractor[]
 }
 
 export interface Suite {
@@ -29,6 +33,7 @@ export interface Sample {
   status: number | null
   ms: number
   failures: string[]
+  extracted?: [string, string][]
 }
 
 export const LIMITS = { threads: 100, loops: 10_000, rampUp: 3600 }
@@ -48,7 +53,7 @@ export function createSuite(existing: Suite[]): Suite {
 }
 
 export function createStep(requestId: string): SuiteStep {
-  return { id: crypto.randomUUID(), requestId, status: '2xx', maxMs: '', contains: '' }
+  return { id: crypto.randomUUID(), requestId, status: '2xx', maxMs: '', contains: '', extract: [] }
 }
 
 export const plannedSamples = (s: Suite): number =>
@@ -101,8 +106,11 @@ export function assess(
 
 export interface RunOptions {
   suite: Suite
-  /** Builds the HTTP input for a step's request; undefined when the request is gone. */
-  resolve: (requestId: string) => HttpRequestInput | undefined
+  /**
+   * Builds the HTTP input for a step's request with the thread's extracted variables;
+   * undefined when the request is gone.
+   */
+  resolve: (requestId: string, vars: Record<string, string>) => HttpRequestInput | undefined
   send: (input: HttpRequestInput) => Promise<HttpResult>
   onSample: (sample: Sample) => void
   signal: AbortSignal
@@ -136,13 +144,15 @@ export async function runSuite({
 
   const worker = async (thread: number): Promise<void> => {
     if (rampMs && thread > 0) await sleep((rampMs * thread) / threads, signal)
+    // Each thread keeps its own variables across steps and loops, like a JMeter thread.
+    const vars: Record<string, string> = {}
     for (let iteration = 0; iteration < loops; iteration++) {
       for (const step of suite.steps) {
         if (signal.aborted) return
         const base = { stepId: step.id, thread, iteration }
         let input: HttpRequestInput | undefined
         try {
-          input = resolve(step.requestId)
+          input = resolve(step.requestId, vars)
         } catch (err) {
           onSample({ ...base, status: null, ms: 0, failures: [(err as Error).message] })
           continue
@@ -153,7 +163,17 @@ export async function runSuite({
         }
         const started = performance.now()
         const result = await send(input)
-        onSample({ ...base, ...assess(step, result, Math.round(performance.now() - started)) })
+        const sample: Sample = {
+          ...base,
+          ...assess(step, result, Math.round(performance.now() - started))
+        }
+        if (result.ok && step.extract.length) {
+          const { values, failures } = runExtractors(step.extract, result.response)
+          for (const [name, value] of values) vars[name] = value
+          sample.failures.push(...failures)
+          if (values.length) sample.extracted = values
+        }
+        onSample(sample)
       }
     }
   }
@@ -227,7 +247,13 @@ export function normalizeSuite(s: Record<string, unknown>): Suite {
         requestId: st.requestId as string,
         status: text(st.status, '2xx'),
         maxMs: text(st.maxMs),
-        contains: text(st.contains)
+        contains: text(st.contains),
+        extract: (Array.isArray(st.extract) ? st.extract : []).filter(isRecord).map((ex) => ({
+          id: text(ex.id) || crypto.randomUUID(),
+          variable: text(ex.variable),
+          source: isExtractSource(ex.source) ? ex.source : 'json',
+          expr: text(ex.expr)
+        }))
       }))
   }
 }

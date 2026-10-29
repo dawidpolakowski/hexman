@@ -297,7 +297,7 @@ try {
     'header shows the "From testers to testers" tagline'
   )
   assert(
-    (await evaluate(`localStorage.getItem('hexman.schema')`)) === '1',
+    (await evaluate(`localStorage.getItem('hexman.schema')`)) === '2',
     'a fresh profile is stamped with the current data schema'
   )
   assert(
@@ -604,6 +604,17 @@ try {
   await typeInto(q('.step:nth-child(1) .assert-wide input'), 'Ada')
   await typeInto(q('.step:nth-child(2) .assert input'), '201', { replace: true })
   await typeInto(q('.step:nth-child(1) .assert:nth-of-type(2) input'), '1000')
+  // extractors: a header on step 1, JSON on steps 2 and 4
+  const addExtractor = async (step, variable, source, expr) => {
+    await click(q(`.step:nth-child(${step}) .add-extract`))
+    const row = `[...document.querySelectorAll('.step:nth-child(${step}) .extractor')].at(-1)`
+    await typeInto(`${row}.querySelector('.extract-var')`, variable)
+    await choose(`${row}.querySelector('select')`, source)
+    await typeInto(`${row}.querySelector('.extract-expr')`, expr)
+  }
+  await addExtractor(1, 'requestId', 'header', 'X-Request-ID')
+  await addExtractor(2, 'userId', 'json', '$.id')
+  await addExtractor(4, 'token', 'json', '$.token')
   assert(
     (await textOf(q('.tg-total'))) === '= 160 samples',
     'thread group plans threads × loops × steps'
@@ -616,6 +627,18 @@ try {
     `[...document.querySelectorAll('.failure-why')].map(e => e.textContent)`
   )
   assert(total[1] === '160', 'suite runs every sample (4 threads × 10 loops × 4 steps)')
+  const extractedRows = await evaluate(
+    `[...document.querySelectorAll('.extracted-row')].map(r => r.querySelector('.extracted-name').textContent + '=' + r.querySelector('.extracted-value').textContent)`
+  )
+  assert(
+    extractedRows.join() === '{{requestId}}=req_7f3a9c1e2b,{{userId}}=43,{{token}}=demo-token',
+    'extractors save header and JSON values as variables, shown in the report'
+  )
+  const storedSuite = JSON.parse(await evaluate(`localStorage.getItem('hexman.suites.v1')`))[0]
+  assert(
+    storedSuite.steps[3].extract[0].variable === 'token',
+    'extractors are saved with the suite'
+  )
   assert(
     reasons.length > 0 &&
       reasons.every((r) => r === 'Status 429, expected 2xx · Body does not contain "Ada"'),

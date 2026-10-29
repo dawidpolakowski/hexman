@@ -19,14 +19,25 @@ import type { Suite } from './suite'
 import { normalizeSuite, restoreSuites } from './suite'
 
 /** Bump when stored data changes shape, and add a migration that upgrades the previous version. */
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 export const SCHEMA_KEY = 'hexman.schema'
 export const BACKUP_KEY = 'hexman.backup'
 
 export type Migration = (storage: StorageLike) => void
 
 /** MIGRATIONS[n] upgrades stored data from schema n - 1 to schema n. */
-export const MIGRATIONS: Record<number, Migration> = {}
+export const MIGRATIONS: Record<number, Migration> = {
+  // 2: suite steps carry extractors.
+  2: (storage) => {
+    const suites = readJson(KEYS.suites, storage)
+    if (!Array.isArray(suites)) return
+    for (const suite of suites) {
+      if (!isRecord(suite) || !Array.isArray(suite.steps)) continue
+      for (const step of suite.steps) if (isRecord(step) && !step.extract) step.extract = []
+    }
+    writeJson(KEYS.suites, suites, storage)
+  }
+}
 
 export type MigrationResult =
   | { status: 'current' | 'migrated'; from: number; to: number }

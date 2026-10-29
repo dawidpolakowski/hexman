@@ -6,6 +6,7 @@ import { createStep, createSuite } from './suite'
 import type { Workspace } from './workspace'
 import {
   BACKUP_KEY,
+  MIGRATIONS,
   SCHEMA_KEY,
   SCHEMA_VERSION,
   importSummary,
@@ -35,7 +36,11 @@ const saved = (over: Parameters<typeof createRequest>[0] = []): ReturnType<typeo
 describe('schema migrations', () => {
   it('stamps a fresh profile with the current schema', () => {
     const storage = memoryStorage()
-    expect(migrateStorage(storage)).toEqual({ status: 'current', from: 1, to: 1 })
+    expect(migrateStorage(storage)).toEqual({
+      status: 'current',
+      from: SCHEMA_VERSION,
+      to: SCHEMA_VERSION
+    })
     expect(storage.data[SCHEMA_KEY]).toBe(String(SCHEMA_VERSION))
     expect(storage.data[BACKUP_KEY]).toBeUndefined()
   })
@@ -78,6 +83,13 @@ describe('schema migrations', () => {
     let ran = false
     expect(() => migrateStorage(failing, { 2: () => (ran = true) }, 2)).toThrow(/Could not back up/)
     expect(ran).toBe(false)
+  })
+
+  it('schema 2: gives existing suite steps an empty extractor list', () => {
+    const v1 = [{ id: 's', name: 'S', steps: [{ id: 'a', requestId: 'r', status: '2xx' }] }]
+    const storage = memoryStorage({ [KEYS.suites]: JSON.stringify(v1) })
+    expect(migrateStorage(storage, MIGRATIONS, 2).status).toBe('migrated')
+    expect(JSON.parse(storage.data[KEYS.suites])[0].steps[0].extract).toEqual([])
   })
 
   it('leaves data from a newer Hexman untouched', () => {

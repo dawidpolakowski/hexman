@@ -30,7 +30,7 @@ Hexman is deliberately **not** a Postman/Bruno clone. The owner uses Bruno at wo
 - `src/renderer/src/`:
   - `model.ts` — requests, folders, environments (`{{var}}` substitution), header helpers, `localStorage` persistence.
   - `formats.ts` — cURL and JSON serialize/parse (the `FORMATS` registry used by the editor views).
-  - `suite.ts` — suite model, runner, assertions and report. `useSuiteRuns.ts` runs suites in the background.
+  - `suite.ts` — suite model, runner, assertions and report. `useSuiteRuns.ts` runs suites in the background. `extract.ts` — step extractors (JSON path subset, header, regex); the runner keeps one variable map per thread and passes it to `resolve(requestId, vars)`.
   - `workspace.ts` — stored-data schema version (`SCHEMA_VERSION`, `MIGRATIONS`, backup before migrating; run in `main.tsx` before `App` mounts) and the workspace export/import file format. When stored data changes shape, bump `SCHEMA_VERSION` and add a migration instead of silently reading both shapes.
   - `App.tsx` holds all state. Saved requests only reach disk on Save, via the `snapshots` ref; folders, suites and environments autosave.
 - `electron.vite.config.ts` — build config for all three (electron-vite wraps Vite).

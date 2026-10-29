@@ -105,11 +105,12 @@ function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
 
   const activeEnv = environments.find((e) => e.id === activeEnvId) ?? null
   const vars = activeEnv ? parseVars(activeEnv.vars) : {}
-  const toInput = (r: ApiRequest): HttpRequestInput => buildHttpInput(resolveRequest(r, vars))
+  const toInput = (r: ApiRequest, extra: Record<string, string> = {}): HttpRequestInput =>
+    buildHttpInput(resolveRequest(r, { ...vars, ...extra }))
 
-  const { runs, start, stop } = useSuiteRuns((requestId) => {
+  const { runs, start, stop } = useSuiteRuns((requestId, threadVars) => {
     const r = requests.find((x) => x.id === requestId)
-    return r ? toInput(r) : undefined
+    return r ? toInput(r, threadVars) : undefined
   }, network)
 
   const request =

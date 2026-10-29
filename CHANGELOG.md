@@ -2,6 +2,16 @@
 
 All notable changes to Hexman. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Extractors** in suites: save a value from a step's response (JSON path, header or regex) as `{{variable}}` for the following steps. Variables are per thread; the report shows the latest extracted values.
+
+### Changed
+
+- Stored data schema 2 (suite steps carry extractors). Older versions refuse to open it instead of dropping extractors.
+
 ## 0.2.0 — 2026-10-29
 
 Safe to hand to other testers: your data survives updates, can leave the app, and the app works behind corporate networks.

@@ -18,7 +18,7 @@ const FLUSH_MS = 200
 
 /** Runs suites in the background; samples are batched into state a few times a second. */
 export function useSuiteRuns(
-  resolve: (requestId: string) => HttpRequestInput | undefined,
+  resolve: (requestId: string, vars: Record<string, string>) => HttpRequestInput | undefined,
   network: NetworkSettings
 ): {
   runs: Record<string, RunState>
@@ -64,7 +64,7 @@ export function useSuiteRuns(
 
     runSuite({
       suite,
-      resolve: (id) => resolveRef.current(id),
+      resolve: (id, vars) => resolveRef.current(id, vars),
       send: (input) => window.api.sendRequest(input, { network: networkRef.current }),
       onSample: (sample) => buffer.push(sample),
       signal: controller.signal
