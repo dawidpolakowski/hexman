@@ -9,6 +9,7 @@ interface Props {
   sending: boolean
   onChange: (patch: Partial<ApiRequest>) => void
   onSend: () => void
+  onCancel: () => void
 }
 
 function serialize(
@@ -23,7 +24,14 @@ function serialize(
 }
 
 /** The request as editable text (cURL or JSON); every valid edit flows back into the request. */
-function CodeView({ format, request, sending, onChange, onSend }: Props): React.JSX.Element {
+function CodeView({
+  format,
+  request,
+  sending,
+  onChange,
+  onSend,
+  onCancel
+}: Props): React.JSX.Element {
   const current = serialize(format, request)
   const [synced, setSynced] = useState(current.text)
   const [text, setText] = useState(current.text)
@@ -85,14 +93,20 @@ function CodeView({ format, request, sending, onChange, onSend }: Props): React.
         <button type="button" className="btn" onClick={copy}>
           {copied ? 'Copied' : 'Copy'}
         </button>
-        <button
-          type="button"
-          className="btn btn-send"
-          disabled={!!error || sending || !request.url.trim()}
-          onClick={onSend}
-        >
-          {sending ? '…' : 'Send'}
-        </button>
+        {sending ? (
+          <button type="button" className="btn btn-stop" onClick={onCancel}>
+            Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-send"
+            disabled={!!error || !request.url.trim()}
+            onClick={onSend}
+          >
+            Send
+          </button>
+        )}
       </div>
     </div>
   )

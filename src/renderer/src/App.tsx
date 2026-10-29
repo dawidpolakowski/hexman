@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useRef, useState } from 'react'
-import type { HttpRequestInput, HttpResult } from '../../shared/http'
+import type { HttpRequestInput, HttpResult, NetworkSettings } from '../../shared/http'
 import EnvEditor from './components/EnvEditor'
+import ImportDialog from './components/ImportDialog'
 import RequestEditor from './components/RequestEditor'
+import SettingsEditor from './components/SettingsEditor'
 import ResponseView from './components/ResponseView'
 import type { Selection } from './components/Sidebar'
 import Sidebar from './components/Sidebar'
@@ -23,6 +25,7 @@ import {
   restoreActiveEnv,
   restoreEnvironments,
   restoreFolders,
+  restoreSettings,
   sidebarOrder,
   toSaved,
   writeJson
@@ -30,23 +33,58 @@ import {
 import type { Suite } from './suite'
 import { createSuite, persistSuites, restoreSuites } from './suite'
 import { useSuiteRuns } from './useSuiteRuns'
+import type { ImportLine, MigrationResult, Workspace } from './workspace'
+import {
+  BACKUP_KEY,
+  importSummary,
+  isEmptyWorkspace,
+  mergeById,
+  parseWorkspace,
+  serializeWorkspace
+} from './workspace'
+
+interface Notice {
+  kind: 'ok' | 'error'
+  text: string
+  offerBackup?: boolean // after a schema upgrade: lets the user save the pre-upgrade copy
+}
+
+interface PendingImport {
+  path: string
+  ws: Workspace
+  lines: ImportLine[]
+}
+
+const NOTICE_MS = 8000
+const fileName = (path: string): string => path.split(/[\\/]/).pop() ?? path
 
 function initialRequests(): ApiRequest[] {
   const restored = restore()
   return restored.length > 0 ? restored : [createRequest([])]
 }
 
-function App(): React.JSX.Element {
+function App({ migration }: { migration: MigrationResult }): React.JSX.Element {
   const [initial] = useState(initialRequests)
   const [requests, setRequests] = useState<ApiRequest[]>(initial)
   const [folders, setFolders] = useState<Folder[]>(restoreFolders)
   const [suites, setSuites] = useState<Suite[]>(restoreSuites)
   const [environments, setEnvironments] = useState<Environment[]>(restoreEnvironments)
   const [activeEnvId, setActiveEnvId] = useState<string | null>(restoreActiveEnv)
+  const [network, setNetwork] = useState<NetworkSettings>(restoreSettings)
   const [selected, setSelected] = useState<Selection>({ type: 'request', id: initial[0].id })
   const [view, setView] = useState<View>('form')
   const [results, setResults] = useState<Record<string, HttpResult>>({})
   const [sending, setSending] = useState<Set<string>>(new Set())
+  const [pendingImport, setPendingImport] = useState<PendingImport | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(() =>
+    migration.status === 'migrated'
+      ? {
+          kind: 'ok',
+          text: `Hexman upgraded your data (schema ${migration.from} → ${migration.to}) and kept a copy of the old data.`,
+          offerBackup: true
+        }
+      : null
+  )
   // Last saved version of each saved request: edits only reach disk on Save.
   const snapshots = useRef(
     new Map<string, SavedRequest>(initial.filter((r) => r.saved).map((r) => [r.id, toSaved(r)]))
@@ -57,6 +95,13 @@ function App(): React.JSX.Element {
   useEffect(() => persistSuites(suites), [suites])
   useEffect(() => writeJson(KEYS.environments, environments), [environments])
   useEffect(() => writeJson(KEYS.activeEnv, activeEnvId), [activeEnvId])
+  useEffect(() => writeJson(KEYS.settings, network), [network])
+
+  useEffect(() => {
+    if (!notice || notice.offerBackup) return
+    const timer = setTimeout(() => setNotice(null), NOTICE_MS)
+    return () => clearTimeout(timer)
+  }, [notice])
 
   const activeEnv = environments.find((e) => e.id === activeEnvId) ?? null
   const vars = activeEnv ? parseVars(activeEnv.vars) : {}
@@ -65,13 +110,14 @@ function App(): React.JSX.Element {
   const { runs, start, stop } = useSuiteRuns((requestId) => {
     const r = requests.find((x) => x.id === requestId)
     return r ? toInput(r) : undefined
-  })
+  }, network)
 
   const request =
     selected.type === 'request' ? requests.find((r) => r.id === selected.id) : undefined
   const suite = selected.type === 'suite' ? suites.find((s) => s.id === selected.id) : undefined
   const env = selected.type === 'env' ? environments.find((e) => e.id === selected.id) : undefined
-  const shownRequest = request ?? (suite || env ? undefined : requests[0])
+  const settingsShown = selected.type === 'settings'
+  const shownRequest = request ?? (suite || env || settingsShown ? undefined : requests[0])
 
   const firstRequest = (list: ApiRequest[] = requests): Selection => ({
     type: 'request',
@@ -80,13 +126,13 @@ function App(): React.JSX.Element {
 
   /* ---- requests ---- */
 
-  const persistSaved = (list: ApiRequest[]): void => {
-    persist(
-      list
-        .filter((r) => snapshots.current.has(r.id))
-        .map((r) => ({ ...r, ...snapshots.current.get(r.id)!, folderId: r.folderId }))
-    )
-  }
+  // Saved requests as they are on disk: the last saved version, in the folder they sit in now.
+  const onDisk = (list: ApiRequest[]): ApiRequest[] =>
+    list
+      .filter((r) => snapshots.current.has(r.id))
+      .map((r) => ({ ...r, ...snapshots.current.get(r.id)!, folderId: r.folderId }))
+
+  const persistSaved = (list: ApiRequest[]): void => persist(onDisk(list))
 
   const updateRequest = (id: string, patch: Partial<ApiRequest>): void => {
     setRequests((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch, dirty: r.saved } : r)))
@@ -142,7 +188,7 @@ function App(): React.JSX.Element {
     setSending((s) => new Set(s).add(r.id))
     let result: HttpResult
     try {
-      result = await window.api.sendRequest(toInput(r))
+      result = await window.api.sendRequest(toInput(r), { id: r.id, network })
     } catch (err) {
       result = { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
@@ -207,6 +253,64 @@ function App(): React.JSX.Element {
     if (selected.type === 'env' && selected.id === id) setSelected(firstRequest())
   }
 
+  /* ---- export / import ---- */
+
+  const saveBackup = async (): Promise<void> => {
+    const result = await window.api.saveFile({
+      suggestedName: 'hexman-backup.json',
+      content: localStorage.getItem(BACKUP_KEY) ?? '{}'
+    })
+    if (result.status === 'saved') setNotice({ kind: 'ok', text: `Saved to ${result.path}` })
+    if (result.status === 'error') setNotice({ kind: 'error', text: result.error })
+  }
+
+  const exportWorkspace = async (): Promise<void> => {
+    const ws = { requests: onDisk(requests).map(toSaved), folders, suites, environments }
+    const day = new Date().toISOString().slice(0, 10)
+    const result = await window.api.saveFile({
+      suggestedName: `hexman-workspace-${day}.json`,
+      content: serializeWorkspace(ws)
+    })
+    if (result.status === 'error')
+      setNotice({ kind: 'error', text: `Export failed: ${result.error}` })
+    if (result.status !== 'saved') return
+    const unsaved = requests.filter((r) => r.dirty || (!r.saved && r.url.trim())).length
+    const skipped = unsaved ? ` Unsaved changes in ${unsaved} request(s) are not included.` : ''
+    setNotice({ kind: 'ok', text: `Exported to ${result.path}.${skipped}` })
+  }
+
+  const startImport = async (): Promise<void> => {
+    const result = await window.api.openFile()
+    if (result.status === 'canceled') return
+    if (result.status === 'error') {
+      setNotice({ kind: 'error', text: `Import failed: ${result.error}` })
+      return
+    }
+    try {
+      const ws = parseWorkspace(result.content)
+      if (isEmptyWorkspace(ws)) throw new Error('The file has nothing to import')
+      const current = { requests: onDisk(requests).map(toSaved), folders, suites, environments }
+      setPendingImport({ path: result.path, ws, lines: importSummary(current, ws) })
+    } catch (err) {
+      setNotice({ kind: 'error', text: `Import failed: ${(err as Error).message}` })
+    }
+  }
+
+  const applyImport = ({ path, ws }: PendingImport): void => {
+    setPendingImport(null)
+    for (const r of ws.requests) snapshots.current.set(r.id, r)
+    const next = mergeById(
+      requests,
+      ws.requests.map((r) => ({ ...r, saved: true, dirty: false }))
+    )
+    setRequests(next)
+    persistSaved(next)
+    setFolders(mergeById(folders, ws.folders))
+    setSuites(mergeById(suites, ws.suites))
+    setEnvironments(mergeById(environments, ws.environments))
+    setNotice({ kind: 'ok', text: `Imported ${fileName(path)}` })
+  }
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && shownRequest) {
@@ -247,6 +351,8 @@ function App(): React.JSX.Element {
         onNewEnv={addEnv}
         onDeleteEnv={removeEnv}
         onActivateEnv={setActiveEnvId}
+        onImport={startImport}
+        onExport={exportWorkspace}
       />
       <main className={`workspace${shownRequest ? '' : ' workspace-scroll'}`}>
         {shownRequest && (
@@ -263,6 +369,7 @@ function App(): React.JSX.Element {
               onChange={(patch) => updateRequest(shownRequest.id, patch)}
               onMove={(folderId) => moveRequest(shownRequest.id, folderId)}
               onSend={() => send(shownRequest)}
+              onCancel={() => window.api.cancelRequest(shownRequest.id)}
               onSave={() => saveRequest(shownRequest.id)}
             />
             <ResponseView
@@ -284,6 +391,12 @@ function App(): React.JSX.Element {
             onStop={() => stop(suite.id)}
           />
         )}
+        {settingsShown && (
+          <SettingsEditor
+            network={network}
+            onChange={(patch) => setNetwork((n) => ({ ...n, ...patch }))}
+          />
+        )}
         {env && (
           <EnvEditor
             key={env.id}
@@ -294,6 +407,27 @@ function App(): React.JSX.Element {
           />
         )}
       </main>
+      {pendingImport && (
+        <ImportDialog
+          fileName={fileName(pendingImport.path)}
+          lines={pendingImport.lines}
+          onConfirm={() => applyImport(pendingImport)}
+          onCancel={() => setPendingImport(null)}
+        />
+      )}
+      {notice && (
+        <div className={`notice notice-${notice.kind}`} role="status">
+          <span className="notice-text">{notice.text}</span>
+          {notice.offerBackup && (
+            <button className="mini-btn" onClick={saveBackup}>
+              Save copy…
+            </button>
+          )}
+          <button className="tile-close" aria-label="Dismiss" onClick={() => setNotice(null)}>
+            ×
+          </button>
+        </div>
+      )}
     </div>
   )
 }

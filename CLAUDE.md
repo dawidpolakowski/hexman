@@ -23,13 +23,15 @@ Hexman is deliberately **not** a Postman/Bruno clone. The owner uses Bruno at wo
 
 ## Architecture
 
-- `src/main/` — Electron main process. `http.ts` sends requests with Node `fetch` (http/https only, 30 s timeout) behind the `http:send` IPC handler.
-- `src/preload/` — exposes `window.api.sendRequest` via `contextBridge`.
+- `src/main/` — Electron main process. `http.ts` sends requests with undici's `fetch` (http/https only) behind `http:send`, using the `NetworkSettings` sent along with each request (timeout, TLS verification, proxy; one dispatcher per TLS/proxy combo). It also handles `http:cancel` by request id. Its tests use a self-signed cert from `src/main/fixtures/`. `files.ts` handles the `file:save`/`file:open` dialogs (50 MB cap).
+- `src/main/security.ts` — the renderer is sandboxed (`sandbox: true`, context isolation). Navigation away from the app page is blocked, only http(s)/mailto links open externally, and all browser permissions are denied. Every IPC handler goes through `handle()` in `index.ts`, which rejects senders other than the app's top-level page; validate IPC arguments in the main process.
+- `src/preload/` — exposes the narrow `window.api` (`sendRequest`, `cancelRequest`, `saveFile`, `openFile`) via `contextBridge`. Because it runs sandboxed, it may import only `electron` (no npm packages); its type is `Api`.
 - `src/shared/http.ts` — request/response types shared by main and renderer (included in both tsconfigs).
 - `src/renderer/src/`:
   - `model.ts` — requests, folders, environments (`{{var}}` substitution), header helpers, `localStorage` persistence.
   - `formats.ts` — cURL and JSON serialize/parse (the `FORMATS` registry used by the editor views).
   - `suite.ts` — suite model, runner, assertions and report. `useSuiteRuns.ts` runs suites in the background.
+  - `workspace.ts` — stored-data schema version (`SCHEMA_VERSION`, `MIGRATIONS`, backup before migrating; run in `main.tsx` before `App` mounts) and the workspace export/import file format. When stored data changes shape, bump `SCHEMA_VERSION` and add a migration instead of silently reading both shapes.
   - `App.tsx` holds all state. Saved requests only reach disk on Save, via the `snapshots` ref; folders, suites and environments autosave.
 - `electron.vite.config.ts` — build config for all three (electron-vite wraps Vite).
 - `electron-builder.yml` — packaging config for distributable builds.
@@ -43,12 +45,14 @@ npm test           # unit tests (Vitest): model, formats, suite, main-process ht
 npm run test:e2e   # build + drive the real app over CDP against a local demo API; rewrites docs/screenshot*.png
 npm run typecheck  # tsc --noEmit for both main/preload (node) and renderer (web) projects
 npm run lint       # eslint --cache .
-npm run format     # prettier --write .
+npm run format     # prettier --write . (CI runs format:check)
 npm run build      # typecheck + production build (output in out/)
 npm run build:win  # build + package a Windows installer (electron-builder)
 ```
 
-`scripts/e2e.mjs` launches Electron with `--user-data-dir` set to a temp profile, so it never touches the real `%APPDATA%\hexman` data. When it fails, it prints the path of a failure screenshot. In e2e helpers, never mutate React-owned DOM nodes (e.g. `.remove()`); mark them with attributes instead, or React crashes on the next render.
+CI (`.github/workflows/ci.yml`) runs lint, format:check, typecheck and unit tests on Ubuntu, and the e2e run on Windows, for pushes to `main`/`develop` and for PRs.
+
+`scripts/e2e.mjs` launches Electron with `--user-data-dir` set to a temp profile, so it never touches the real `%APPDATA%\hexman` data. When it fails, it prints the path of a failure screenshot. It also attaches to the main process through `--inspect`, so `stubDialog()` can answer native save/open dialogs with a file path. In e2e helpers, never mutate React-owned DOM nodes (e.g. `.remove()`); mark them with attributes instead, or React crashes on the next render.
 
 ## Gotchas
 

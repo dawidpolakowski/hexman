@@ -1,11 +1,15 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, session, type IpcMainInvokeEvent } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { sendRequest } from './http'
+import type { SendOptions } from '../shared/http'
+import { openFileDialog, saveFileDialog } from './files'
+import { cancelRequest, sendRequest } from './http'
+import { denyPermissions, fromApp, hardenWindow, isHttpRequestInput } from './security'
+
+const devUrl = is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined
 
 function createWindow(): void {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 1360,
     height: 840,
@@ -17,7 +21,9 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
     }
   })
 
@@ -25,18 +31,26 @@ function createWindow(): void {
     mainWindow.show()
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
+  hardenWindow(mainWindow, devUrl)
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  if (devUrl) {
+    mainWindow.loadURL(devUrl)
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+/** Registers an IPC handler that ignores calls from anything but the app's own page. */
+function handle(
+  channel: string,
+  listener: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown
+): void {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!fromApp(event, devUrl)) throw new Error(`Rejected ${channel} from an unknown sender`)
+    return listener(event, ...args)
+  })
 }
 
 // This method will be called when Electron has finished
@@ -53,7 +67,19 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  ipcMain.handle('http:send', (_event, input) => sendRequest(input))
+  denyPermissions(session.defaultSession)
+
+  handle('http:send', (_event, input, options) =>
+    isHttpRequestInput(input)
+      ? sendRequest(
+          input,
+          (typeof options === 'object' && options !== null ? options : {}) as SendOptions
+        )
+      : { ok: false, error: 'Invalid request' }
+  )
+  handle('http:cancel', (_event, id) => typeof id === 'string' && cancelRequest(id))
+  handle('file:save', saveFileDialog)
+  handle('file:open', (event) => openFileDialog(event))
 
   createWindow()
 
@@ -72,6 +98,3 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.

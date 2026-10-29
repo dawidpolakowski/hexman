@@ -11,6 +11,7 @@ All participants are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md
 ## Reporting bugs
 
 Open a [GitHub Issue](../../issues) using the bug report template. Include:
+
 - Steps to reproduce
 - Expected vs. actual behavior
 - Your OS and Hexman version

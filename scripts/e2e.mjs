@@ -4,7 +4,7 @@
 // Chrome DevTools Protocol, checks the core flows and writes docs/screenshot*.png.
 // Run with `npm run test:e2e` (builds first).
 import { spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -62,6 +62,7 @@ function demoApi(req, res) {
     }
     if (route === 'POST /api/login') return json(200, { token: 'demo-token', expiresIn: 3600 })
     if (route === 'GET /health') return json(200, { status: 'ok' })
+    if (route === 'GET /slow') return setTimeout(() => json(200, { status: 'late' }), 3000)
     if (route === 'POST /graphql') {
       const { query } = JSON.parse(body || '{}')
       if (!query) return json(400, { errors: [{ message: 'Missing query' }] })
@@ -92,6 +93,20 @@ async function pageTarget(port) {
     await sleep(200)
   }
   throw new Error('App did not expose a page target')
+}
+
+// The main process, reached through its Node inspector, so native dialogs can be stubbed.
+async function mainTarget(port) {
+  for (let i = 0; i < 150; i++) {
+    try {
+      const [target] = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
+      if (target) return target.webSocketDebuggerUrl
+    } catch {
+      /* app still starting */
+    }
+    await sleep(200)
+  }
+  throw new Error('App did not expose its main process inspector')
 }
 
 function connect(url) {
@@ -135,21 +150,33 @@ const api = createServer(demoApi)
 const apiPort = await listen(api, 4010).catch(() => listen(api, 0))
 const API = `http://localhost:${apiPort}`
 
-const probe = createServer()
-const cdpPort = await listen(probe, 0)
-await new Promise((r) => probe.close(r))
+const freePort = async () => {
+  const probe = createServer()
+  const port = await listen(probe, 0)
+  await new Promise((r) => probe.close(r))
+  return port
+}
+const cdpPort = await freePort()
+const inspectPort = await freePort()
 
 const profile = mkdtempSync(join(tmpdir(), 'hexman-e2e-'))
 const app = spawn(
   electronPath,
-  [root, `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${profile}`],
+  [
+    `--inspect=${inspectPort}`,
+    root,
+    `--remote-debugging-port=${cdpPort}`,
+    `--user-data-dir=${profile}`
+  ],
   { stdio: 'ignore' }
 )
 const exited = new Promise((r) => app.once('exit', r))
 
 let cdp
+let main
 try {
   cdp = await connect(await pageTarget(cdpPort))
+  main = await connect(await mainTarget(inspectPort))
 
   const evaluate = async (expression) => {
     const { result, exceptionDetails } = await cdp.send('Runtime.evaluate', {
@@ -161,6 +188,17 @@ try {
       throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text)
     }
     return result.value
+  }
+  // Runs in the main process: the next save/open dialog answers with this path.
+  const stubDialog = async (kind, path) => {
+    const answer =
+      kind === 'save' ? { canceled: false, filePath: path } : { canceled: false, filePaths: [path] }
+    const method = kind === 'save' ? 'showSaveDialog' : 'showOpenDialog'
+    const { exceptionDetails } = await main.send('Runtime.evaluate', {
+      includeCommandLineAPI: true,
+      expression: `require('electron').dialog.${method} = async () => (${JSON.stringify(answer)})`
+    })
+    if (exceptionDetails) throw new Error(exceptionDetails.exception?.description)
   }
   const waitFor = async (expression, label, timeoutMs = 10_000) => {
     for (const end = Date.now() + timeoutMs; Date.now() < end;) {
@@ -257,6 +295,16 @@ try {
   assert(
     (await textOf(q('.brand-tagline'))) === 'From testers to testers',
     'header shows the "From testers to testers" tagline'
+  )
+  assert(
+    (await evaluate(`localStorage.getItem('hexman.schema')`)) === '1',
+    'a fresh profile is stamped with the current data schema'
+  )
+  assert(
+    (await evaluate(
+      `typeof require === 'undefined' && typeof process === 'undefined' && !('electron' in window) && Object.keys(window.api).sort().join()`
+    )) === 'cancelRequest,openFile,saveFile,sendRequest',
+    'the renderer is sandboxed and sees only the narrow window.api'
   )
 
   /* --- seed a workspace --- */
@@ -496,6 +544,49 @@ try {
   await waitFor(`${q('.error-text')}?.textContent.includes('Unsupported protocol')`, 'error')
   assert(true, 'non-HTTP URLs are rejected with a readable error')
 
+  /* --- cancel, settings --- */
+  await typeInto(q('.url-input'), '{{baseUrl}}/slow', { replace: true })
+  await click(q('.url-row .btn-send'))
+  await waitFor(q('.url-row .btn-stop'), 'cancel button while sending')
+  await click(q('.url-row .btn-stop'))
+  await waitFor(`${q('.error-text')}?.textContent === 'Canceled'`, 'canceled request')
+  assert(true, 'a running request can be canceled')
+
+  await click(byText('.sidebar-foot .mini-btn', 'Settings'))
+  await waitFor(q('.settings-editor'), 'settings view')
+  await typeInto(
+    `${byText('.num-field span', 'Timeout (seconds)')}.parentElement.querySelector('input')`,
+    '1',
+    {
+      replace: true
+    }
+  )
+  await click(q('.check-row input'))
+  let settings = JSON.parse(await evaluate(`localStorage.getItem('hexman.settings.v1')`))
+  assert(
+    settings.timeoutMs === 1000 &&
+      settings.verifyTls === false &&
+      (await evaluate(`!!${q('.settings-warn')}`)),
+    'settings save the timeout and TLS verification, with a warning when it is off'
+  )
+  await click(tile('Request 2'))
+  await click(q('.url-row .btn-send'))
+  await waitFor(`${q('.error-text')}?.textContent === 'Timed out after 1s'`, 'timeout error')
+  assert(true, 'requests use the timeout from Settings')
+
+  await click(byText('.sidebar-foot .mini-btn', 'Settings'))
+  await waitFor(q('.settings-editor'), 'settings view')
+  await typeInto(
+    `${byText('.num-field span', 'Timeout (seconds)')}.parentElement.querySelector('input')`,
+    '30',
+    {
+      replace: true
+    }
+  )
+  await click(q('.check-row input'))
+  settings = JSON.parse(await evaluate(`localStorage.getItem('hexman.settings.v1')`))
+  assert(settings.timeoutMs === 30000 && settings.verifyTls === true, 'settings can be put back')
+
   await click(tile('Viewer'))
   await sendAndWait(q('.url-row .btn-send'), '200', 'GraphQL response')
   assert(
@@ -550,6 +641,65 @@ try {
   }
   await shot('screenshot.png')
 
+  /* --- export / import --- */
+  const exported = join(profile, 'exported.json')
+  await stubDialog('save', exported)
+  await click(byText('.sidebar-foot .mini-btn', 'Export'))
+  await waitFor(`${q('.notice-ok')}?.textContent.includes('Exported to')`, 'export notice')
+  const file = JSON.parse(readFileSync(exported, 'utf8'))
+  assert(
+    file.format === 'hexman-workspace' &&
+      file.requests.some((r) => r.name === 'Health check') &&
+      file.folders.some((f) => f.name === 'Monitoring') &&
+      file.suites.length === 1 &&
+      file.environments.length === 2,
+    'export writes saved requests, folders, suites and environments to a file'
+  )
+
+  const incoming = join(profile, 'incoming.json')
+  writeFileSync(
+    incoming,
+    JSON.stringify({
+      format: 'hexman-workspace',
+      schema: 1,
+      requests: [
+        { ...file.requests.find((r) => r.name === 'Health check'), name: 'Health (shared)' },
+        {
+          id: 'shared-ping',
+          name: 'Ping',
+          method: 'GET',
+          url: '{{baseUrl}}/health',
+          folderId: 'f-shared'
+        }
+      ],
+      folders: [{ id: 'f-shared', name: 'Shared', collapsed: false }]
+    })
+  )
+  await stubDialog('open', incoming)
+  await click(byText('.sidebar-foot .mini-btn', 'Import'))
+  await waitFor(q('.modal .import-summary'), 'import dialog')
+  const summary = await evaluate(
+    `[...document.querySelectorAll('.import-summary tr')].map(tr => tr.textContent)`
+  )
+  assert(
+    summary.join('|') === 'Requests21 replace existing|Folders1',
+    'import shows what will be added and what replaces existing items'
+  )
+  await click(byText('.modal-actions .btn', 'Import'))
+  await waitFor(`!${q('.modal')}`, 'import dialog to close')
+  tiles = await requestTiles()
+  assert(
+    tiles.find((t) => t.name === 'Ping')?.folder === 'Shared' &&
+      tiles.find((t) => t.name === 'Health (shared)')?.folder === 'Monitoring' &&
+      !tiles.some((t) => t.name === 'Health check'),
+    'import adds new items and replaces ones with the same id'
+  )
+  const onDiskNow = await evaluate(`JSON.parse(localStorage.getItem('hexman.requests.v1'))`)
+  assert(
+    onDiskNow.some((r) => r.name === 'Ping') && onDiskNow.some((r) => r.name === 'Health (shared)'),
+    'imported requests are saved to disk right away'
+  )
+
   console.log(`\n${passed} checks passed`)
 } catch (err) {
   console.error(`\n✗ ${err.message}`)
@@ -564,6 +714,7 @@ try {
   }
 } finally {
   cdp?.close()
+  main?.close()
   app.kill()
   await exited
   api.close()

@@ -12,6 +12,7 @@ Instead, report it privately using one of the following:
 - Email dawidpolakowski@gmail.com
 
 Please include:
+
 - A description of the vulnerability and its potential impact
 - Steps to reproduce or a proof of concept
 - Any relevant logs, screenshots, or affected versions

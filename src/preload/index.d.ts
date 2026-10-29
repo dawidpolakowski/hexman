@@ -1,11 +1,7 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
-import type { HttpRequestInput, HttpResult } from '../shared/http'
+import type { Api } from './index'
 
 declare global {
   interface Window {
-    electron: ElectronAPI
-    api: {
-      sendRequest: (input: HttpRequestInput) => Promise<HttpResult>
-    }
+    api: Api
   }
 }
