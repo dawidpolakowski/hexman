@@ -1,5 +1,7 @@
 # Hexman
 
+[![CI](https://github.com/dawidpolakowski/Hexman/actions/workflows/ci.yml/badge.svg)](https://github.com/dawidpolakowski/Hexman/actions/workflows/ci.yml)
+
 **From testers to testers.** Hexman is a desktop API testing tool for REST and GraphQL, built with Electron. It's built for people who test APIs every day and are tired of tools that all copy Postman.
 
 ![Hexman: requests as tiles, environments, response viewer](docs/screenshot.png)

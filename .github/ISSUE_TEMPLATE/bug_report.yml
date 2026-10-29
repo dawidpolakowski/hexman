@@ -1,6 +1,6 @@
 name: Bug Report
 description: Report a problem with Hexman
-labels: ["bug"]
+labels: ['bug']
 body:
   - type: textarea
     id: description

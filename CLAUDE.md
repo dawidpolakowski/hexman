@@ -45,10 +45,12 @@ npm test           # unit tests (Vitest): model, formats, suite, main-process ht
 npm run test:e2e   # build + drive the real app over CDP against a local demo API; rewrites docs/screenshot*.png
 npm run typecheck  # tsc --noEmit for both main/preload (node) and renderer (web) projects
 npm run lint       # eslint --cache .
-npm run format     # prettier --write .
+npm run format     # prettier --write . (CI runs format:check)
 npm run build      # typecheck + production build (output in out/)
 npm run build:win  # build + package a Windows installer (electron-builder)
 ```
+
+CI (`.github/workflows/ci.yml`) runs lint, format:check, typecheck and unit tests on Ubuntu, and the e2e run on Windows, for pushes to `main`/`develop` and for PRs.
 
 `scripts/e2e.mjs` launches Electron with `--user-data-dir` set to a temp profile, so it never touches the real `%APPDATA%\hexman` data. When it fails, it prints the path of a failure screenshot. It also attaches to the main process through `--inspect`, so `stubDialog()` can answer native save/open dialogs with a file path. In e2e helpers, never mutate React-owned DOM nodes (e.g. `.remove()`); mark them with attributes instead, or React crashes on the next render.
 
