@@ -1,9 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Runs sandboxed: only `electron` may be imported. The renderer gets this narrow API and nothing else.
 import { contextBridge, ipcRenderer } from 'electron'
 import type { OpenFileResult, SaveFileInput, SaveFileResult } from '../shared/files'
 import type { HttpRequestInput, HttpResult, SendOptions } from '../shared/http'
-import { electronAPI } from '@electron-toolkit/preload'
 
-// Custom APIs for renderer
 const api = {
   sendRequest: (input: HttpRequestInput, options?: SendOptions): Promise<HttpResult> =>
     ipcRenderer.invoke('http:send', input, options),
@@ -13,19 +13,6 @@ const api = {
   openFile: (): Promise<OpenFileResult> => ipcRenderer.invoke('file:open')
 }
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
-  }
-} else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
-}
+export type Api = typeof api
+
+contextBridge.exposeInMainWorld('api', api)

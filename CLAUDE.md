@@ -24,7 +24,8 @@ Hexman is deliberately **not** a Postman/Bruno clone. The owner uses Bruno at wo
 ## Architecture
 
 - `src/main/` — Electron main process. `http.ts` sends requests with undici's `fetch` (http/https only) behind `http:send`, using the `NetworkSettings` sent along with each request (timeout, TLS verification, proxy; one dispatcher per TLS/proxy combo). It also handles `http:cancel` by request id. Its tests use a self-signed cert from `src/main/fixtures/`. `files.ts` handles the `file:save`/`file:open` dialogs (50 MB cap).
-- `src/preload/` — exposes `window.api.sendRequest` via `contextBridge`.
+- `src/main/security.ts` — the renderer is sandboxed (`sandbox: true`, context isolation). Navigation away from the app page is blocked, only http(s)/mailto links open externally, and all browser permissions are denied. Every IPC handler goes through `handle()` in `index.ts`, which rejects senders other than the app's top-level page; validate IPC arguments in the main process.
+- `src/preload/` — exposes the narrow `window.api` (`sendRequest`, `cancelRequest`, `saveFile`, `openFile`) via `contextBridge`. Because it runs sandboxed, it may import only `electron` (no npm packages); its type is `Api`.
 - `src/shared/http.ts` — request/response types shared by main and renderer (included in both tsconfigs).
 - `src/renderer/src/`:
   - `model.ts` — requests, folders, environments (`{{var}}` substitution), header helpers, `localStorage` persistence.

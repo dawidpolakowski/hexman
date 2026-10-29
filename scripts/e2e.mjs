@@ -300,6 +300,12 @@ try {
     (await evaluate(`localStorage.getItem('hexman.schema')`)) === '1',
     'a fresh profile is stamped with the current data schema'
   )
+  assert(
+    (await evaluate(
+      `typeof require === 'undefined' && typeof process === 'undefined' && !('electron' in window) && Object.keys(window.api).sort().join()`
+    )) === 'cancelRequest,openFile,saveFile,sendRequest',
+    'the renderer is sandboxed and sees only the narrow window.api'
+  )
 
   /* --- seed a workspace --- */
   const seedRequests = [

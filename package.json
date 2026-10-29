@@ -28,7 +28,6 @@
     "test:e2e": "electron-vite build && node scripts/e2e.mjs"
   },
   "dependencies": {
-    "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "undici": "^7.30.1"
   },
